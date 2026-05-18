@@ -1,0 +1,36 @@
+{
+  "title": "MemGen:WeavingGenerativeLatentMemoryfor",
+  "authors": [
+    "Self-EvolvingAgents GuibinZhang y",
+    "MuxinFu y"
+  ],
+  "year": "2024",
+  "venue": "arXiv:2412.12094 [cs]",
+  "doi": "10.4208/jml.240708",
+  "paper_type": "method",
+  "abstract": "needs-check",
+  "zotero_item_key": "needs-check",
+  "pdf_key": "needs-check",
+  "tags": [
+    "method"
+  ],
+  "one_sentence_summary": "needs-check",
+  "research_relation": "needs-check",
+  "core_library_decision": "候选",
+  "core_library_reason": "needs-check",
+  "why_read": "needs-check",
+  "core_problem": "needs-check",
+  "survey_scope": "needs-check",
+  "survey_taxonomy": "needs-check",
+  "survey_key_papers": "- needs-check\n- needs-check\n- needs-check",
+  "survey_gaps": "needs-check",
+  "method_idea": "needs-check",
+  "method_framework": "needs-check",
+  "experiment_results": "needs-check",
+  "zotero_annotations_and_evidence": "needs-check",
+  "citable_materials": "needs-check",
+  "core_library_review_plan": "needs-check",
+  "my_assessment": "needs-check",
+  "open_questions": "needs-check",
+  "next_actions": "needs-check"
+}

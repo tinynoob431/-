@@ -1,0 +1,41 @@
+{
+  "title": "ReAct: Synergizing Reasoning and Acting in Language Models",
+  "authors": [
+    "Shunyu Yao",
+    "Jeffrey Zhao",
+    "Dian Yu",
+    "Nan Du",
+    "Izhak Shafran",
+    "Karthik Narasimhan",
+    "Yuan Cao"
+  ],
+  "year": "needs-check",
+  "venue": "needs-check",
+  "doi": "needs-check",
+  "paper_type": "method",
+  "abstract": "We present ReAct, a simple framework that combines reasoning traces and actions for language agents.\nThe paper demonstrates improved performance on multiple tasks and highlights interpretability.",
+  "zotero_item_key": "needs-check",
+  "pdf_key": "needs-check",
+  "tags": [
+    "method"
+  ],
+  "one_sentence_summary": "needs-check",
+  "research_relation": "needs-check",
+  "core_library_decision": "候选",
+  "core_library_reason": "needs-check",
+  "why_read": "needs-check",
+  "core_problem": "needs-check",
+  "survey_scope": "needs-check",
+  "survey_taxonomy": "needs-check",
+  "survey_key_papers": "- needs-check\n- needs-check\n- needs-check",
+  "survey_gaps": "needs-check",
+  "method_idea": "needs-check",
+  "method_framework": "needs-check",
+  "experiment_results": "needs-check",
+  "zotero_annotations_and_evidence": "needs-check",
+  "citable_materials": "needs-check",
+  "core_library_review_plan": "needs-check",
+  "my_assessment": "needs-check",
+  "open_questions": "needs-check",
+  "next_actions": "needs-check"
+}

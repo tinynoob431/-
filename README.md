@@ -60,7 +60,7 @@ examples/
 output/
 ```
 
-## 运行脚本
+## 运行脚本(若已有json)
 
 在仓库根目录执行：
 
@@ -77,3 +77,19 @@ output/Graph-based Agent Memory.md
 说明：
 - 缺失字段统一填充为 `needs-check`，便于后续人工复核。
 - 模板和示例笔记均为中文结构，适合直接放入中文 Obsidian 工作流。
+
+## 半自动：从 PDF 生成 JSON 再生成笔记
+
+如果你手里只有 PDF，可以先自动抽取基础字段：
+
+```bash
+python scripts/pdf_to_json.py "你的论文.pdf"
+```
+
+脚本会在 `input/` 下生成同名 JSON 初稿（抽取标题、摘要、DOI、年份、作者等；不确定字段保留 `needs-check`）。
+
+然后继续生成 Markdown：
+
+```bash
+python scripts/generate_note.py input/生成的文件名.json
+```
