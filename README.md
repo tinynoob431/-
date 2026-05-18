@@ -1,4 +1,3 @@
-# -
 # paper-reading-workflow
 
 这是一个 Zotero + AI + Obsidian 的科研论文阅读管理工作流项目。
