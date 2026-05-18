@@ -1,50 +1,21 @@
-# 科研论文阅读管理工作流（Zotero + AI + Obsidian，最小可用版）
+# Zotero + AI + Obsidian 科研论文阅读管理工作流（MVP）
 
-这是一个面向中文科研用户的最小可用工作流原型，目标是把论文阅读从“单次总结”升级为“可持续维护的知识系统”。
+这是一个最小可用（MVP）的论文阅读管理原型，目标是把流程跑通：
 
-## 这个项目解决什么问题
+1. Zotero 管理论文 PDF、元数据与批注（可云同步）  
+2. 脚本抽取信息（可选 AI 自动总结）  
+3. 生成结构化 Markdown 文献笔记并放入 Obsidian 长期维护
 
-常见问题：
-- 论文 PDF、批注、总结分散在不同工具里，后续复用困难。
-- 读 survey 时容易“看过很多，沉淀很少”，缺少统一结构。
-- 个人核心文献库没有清晰入库标准，后续写作和复盘效率低。
+---
 
-本项目通过“固定模板 + 自动生成脚本”把文献笔记结构化，方便长期维护。
+## 当前已实现能力
 
-## 三个组件各自负责什么
+- PDF -> JSON（基础抽取）
+- JSON -> Markdown（模板生成）
+- 可选 AI 总结（OpenAI / DeepSeek 兼容接口）
+- Zotero API -> JSON（可直接用条目 key 拉元数据）
 
-- Zotero：管理 PDF、元数据、标签、批注，作为原始证据层。
-- AI：把论文信息填入模板，生成结构化 Markdown 笔记初稿。
-- Obsidian：维护 survey 地图、关键论文池、个人核心文献库，并通过双链持续迭代。
-
-## 工作流（从 PDF 到 Obsidian）
-
-1. 在 Zotero 中整理条目与标签，保留批注证据。
-2. 把论文信息整理成 `input/*.json`（示例：`input/graph_agent_memory.json`）。
-3. 运行脚本读取 JSON 与模板，自动生成笔记：
-   - 模板：`templates/literature_note_template.md`
-   - 脚本：`scripts/generate_note.py`
-4. 输出 Markdown 到 `output/`，再放入 Obsidian Vault 管理。
-
-## 如何同时支持两类目标
-
-### 1) Survey 阅读
-模板内置 survey 区块，覆盖：
-- 覆盖范围
-- taxonomy（分类框架）
-- 关键论文池
-- 研究空白与机会
-
-用于快速形成“领域地图”。
-
-### 2) 个人核心文献库维护
-模板内置核心库维护区块，覆盖：
-- 与本人研究关系
-- 是否纳入核心库
-- 纳入/暂缓理由
-- 复核计划与后续行动
-
-用于形成“可追踪、可复盘”的个人文献资产。
+---
 
 ## 目录结构
 
@@ -52,44 +23,154 @@
 templates/
   literature_note_template.md
 input/
-  graph_agent_memory.json
+  *.json
 scripts/
+  pdf_to_json.py
+  zotero_to_json.py
+  ai_enrich_json.py
   generate_note.py
+output/
+  *.md
 examples/
   graph_agent_memory.md
-output/
 ```
 
-## 运行脚本(若已有json)
+---
 
-在仓库根目录执行：
+## 使用方式总览
 
-```bash
-python scripts/generate_note.py input/graph_agent_memory.json
+你有两条入口：
+
+1. 从 PDF 开始（最常用）
+2. 从 Zotero 条目 key 开始（元数据更稳）
+
+每条入口都支持：
+- 不用 AI（只抽取可抓到的信息）
+- 用 AI（自动补全总结字段，或全部模块）
+
+---
+
+## 方式 A：从 PDF 开始
+
+### A1. 不用 AI（纯脚本抽取）
+
+```powershell
+python scripts/pdf_to_json.py "你的论文.pdf" --output input\paper.json
+python scripts/generate_note.py input\paper.json
 ```
 
-默认会生成：
+生成文件：
+- `input/paper.json`
+- `output/<标题>.md`
 
-```text
-output/Graph-based Agent Memory.md
+### A2. 使用 AI 自动补全
+
+先设置 AI 环境变量（以 DeepSeek 为例）：
+
+```powershell
+$env:AI_PROVIDER="deepseek"
+$env:AI_API_KEY="你的API_KEY"
+$env:AI_MODEL="deepseek-chat"
+# 可选：
+# $env:AI_BASE_URL="https://api.deepseek.com"
+```
+
+然后执行：
+
+```powershell
+python scripts/pdf_to_json.py "你的论文.pdf" --ai-summary --ai-fill-mode all --output input\paper_ai.json
+python scripts/generate_note.py input\paper_ai.json
 ```
 
 说明：
-- 缺失字段统一填充为 `needs-check`，便于后续人工复核。
-- 模板和示例笔记均为中文结构，适合直接放入中文 Obsidian 工作流。
+- `--ai-summary`：开启 AI
+- `--ai-fill-mode all`：尽量填满 JSON 全部模块字段
+- 若想只填关键字段，可改为 `--ai-fill-mode key`
 
-## 半自动：从 PDF 生成 JSON 再生成笔记
+---
 
-如果你手里只有 PDF，可以先自动抽取基础字段：
+## 方式 B：从 Zotero 条目 key 开始
 
-```bash
-python scripts/pdf_to_json.py "你的论文.pdf"
+### B1. 配置 Zotero API 环境变量
+
+```powershell
+$env:ZOTERO_USER_ID="你的Zotero用户ID"
+$env:ZOTERO_API_KEY="你的Zotero API Key"
+$env:ZOTERO_LIBRARY_TYPE="user"   # 或 group
 ```
 
-脚本会在 `input/` 下生成同名 JSON 初稿（抽取标题、摘要、DOI、年份、作者等；不确定字段保留 `needs-check`）。
+### B2. 拉取元数据生成 JSON
 
-然后继续生成 Markdown：
-
-```bash
-python scripts/generate_note.py input/生成的文件名.json
+```powershell
+python scripts/zotero_to_json.py --item-key 该论文的条目key --include-annotations --output input\该论文的条目key.json
 ```
+
+### B3. 直接生成笔记（不走 AI）
+
+```powershell
+python scripts/generate_note.py input\该论文的条目key.json
+```
+
+### B4. 先走 AI 再生成笔记（可选）
+
+```powershell
+python scripts/ai_enrich_json.py input\该论文的条目key.json --fill-mode all --overwrite
+python scripts/generate_note.py input\该论文的条目key_enriched.json
+```
+
+### B5. 将之前生成的json变为md文件
+
+```powershell
+python scripts/generate_note.py input\文件名.json
+```
+
+---
+
+## AI 配置说明
+
+支持 OpenAI / DeepSeek（OpenAI 兼容接口）：
+
+- `AI_PROVIDER`：`openai` 或 `deepseek`
+- `AI_API_KEY`：你的 API Key
+- `AI_MODEL`：模型名
+- `AI_BASE_URL`：可选（自定义兼容服务时需要）
+
+OpenAI 示例：
+
+```powershell
+$env:AI_PROVIDER="openai"
+$env:AI_API_KEY="你的API_KEY"
+$env:AI_MODEL="gpt-4o-mini"
+```
+
+---
+
+## Zotero 与 Obsidian 如何配合
+
+- Zotero：放 PDF、做批注、做标签、云同步文献资产
+- 本项目脚本：把元数据/文本转成结构化 JSON 与 Markdown
+- Obsidian：长期维护 survey 地图、关键论文池、个人核心文献库
+
+---
+
+## 常见问题
+
+### 1) 没有 Bash 怎么办？
+Windows 直接用 PowerShell 就行，不需要 Bash。
+
+### 2) 不用 AI 能跑吗？
+可以。`pdf_to_json.py` 不加 `--ai-summary` 就是纯脚本模式。
+
+### 3) Zotero 批注会自动进 Markdown 吗？
+从 Zotero 入口 (`zotero_to_json.py --include-annotations`) 可把可获取的批注文本写入 JSON 证据字段，再由 `generate_note.py` 生成到 Markdown。
+
+---
+
+## 最短命令（新手先跑通）
+
+```powershell
+python scripts/pdf_to_json.py "你的论文.pdf" --output input\demo.json
+python scripts/generate_note.py input\demo.json
+```
+
+跑通后再加 AI 或 Zotero API。

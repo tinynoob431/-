@@ -1,12 +1,43 @@
+import argparse
 import json
 import re
-import subprocess
 import sys
 import zlib
 from pathlib import Path
 
+from ai_enrich_json import enrich_data
+
 
 DEFAULT_VALUE = "needs-check"
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="从 PDF 抽取基础信息并生成 JSON，可选接入 AI 自动补全模块。"
+    )
+    parser.add_argument("pdf_path", help="PDF 路径")
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="输出 JSON 路径（默认 input/<pdf文件名>.json）",
+    )
+    parser.add_argument(
+        "--ai-summary",
+        action="store_true",
+        help="启用 AI 自动补全。不开启时仅输出脚本可抽取的信息。",
+    )
+    parser.add_argument(
+        "--ai-fill-mode",
+        choices=["key", "all"],
+        default="all",
+        help="AI补全模式：key=关键字段，all=全部模块字段（默认 all）",
+    )
+    parser.add_argument(
+        "--ai-overwrite",
+        action="store_true",
+        help="AI补全时覆盖已有字段（建议与 all 一起用）",
+    )
+    return parser.parse_args()
 
 
 def normalize_text(text):
@@ -29,12 +60,14 @@ def decode_pdf_literal(raw):
         i += 1
         if i >= len(raw):
             break
+
         esc = raw[i]
         mapping = {"n": "\n", "r": "\r", "t": "\t", "b": "\b", "f": "\f", "\\": "\\", "(": "(", ")": ")"}
         if esc in mapping:
             out.append(mapping[esc])
             i += 1
             continue
+
         # PDF literal octal escapes only allow digits 0-7.
         if esc in "01234567":
             oct_digits = esc
@@ -48,7 +81,6 @@ def decode_pdf_literal(raw):
             try:
                 out.append(chr(int(oct_digits, 8)))
             except ValueError:
-                # Keep parser robust for malformed escapes.
                 out.append(oct_digits)
             continue
 
@@ -75,7 +107,6 @@ def extract_text_from_decoded_stream(stream_text):
     if snippets:
         return "\n".join(snippets)
 
-    # Fallback when text operators are hard to parse.
     rough = re.findall(r"\(([^)]{3,2000})\)", stream_text, flags=re.S)
     return "\n".join(decode_pdf_literal(x) for x in rough)
 
@@ -84,16 +115,9 @@ def extract_text_from_pdf_bytes(pdf_bytes):
     chunks = []
     for match in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", pdf_bytes, flags=re.S):
         raw_stream = match.group(1)
-        decoded = None
-
-        for candidate in (raw_stream,):
-            try:
-                decoded = zlib.decompress(candidate)
-                break
-            except Exception:
-                decoded = None
-
-        if decoded is None:
+        try:
+            decoded = zlib.decompress(raw_stream)
+        except Exception:
             decoded = raw_stream
 
         text = decoded.decode("latin-1", errors="ignore")
@@ -104,29 +128,7 @@ def extract_text_from_pdf_bytes(pdf_bytes):
     return normalize_text("\n\n".join(chunks))
 
 
-def extract_text_with_pdftotext(pdf_path):
-    try:
-        result = subprocess.run(
-            ["pdftotext", "-layout", str(pdf_path), "-"],
-            capture_output=True,
-            text=True,
-            check=False,
-            encoding="utf-8",
-            errors="ignore",
-        )
-    except FileNotFoundError:
-        return ""
-
-    if result.returncode != 0:
-        return ""
-    return normalize_text(result.stdout)
-
-
 def extract_text(pdf_path):
-    text = extract_text_with_pdftotext(pdf_path)
-    if text:
-        return text
-
     data = pdf_path.read_bytes()
     return extract_text_from_pdf_bytes(data)
 
@@ -145,16 +147,13 @@ def guess_title(text, fallback_name):
             continue
         if re.search(r"[A-Za-z]", line):
             score = 0
-            # Prefer earlier lines.
             score += max(0, 20 - idx)
-            # Prefer title-like shape.
             if not line.endswith("."):
                 score += 6
             if ":" in line:
                 score += 3
             if line[:1].isupper():
                 score += 2
-            # Penalize abstract-like declarative sentences.
             if re.search(r"\b(we|this paper|the paper|demonstrates|present|propose)\b", lowered):
                 score -= 8
             if len(line.split()) > 25:
@@ -225,7 +224,6 @@ def guess_venue_and_year(text, pdf_name):
 
     years = re.findall(r"\b(19\d{2}|20\d{2})\b", text[:4000])
     if years:
-        # Pick latest plausible year in extracted front matter.
         valid = [y for y in years if 1990 <= int(y) <= 2035]
         if valid:
             return DEFAULT_VALUE, str(max(int(y) for y in valid))
@@ -298,20 +296,28 @@ def sanitize_stem(name):
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("用法: python scripts/pdf_to_json.py <论文PDF路径> [输出json路径]")
-        sys.exit(1)
-
-    pdf_path = Path(sys.argv[1]).expanduser().resolve()
+    args = parse_args()
+    pdf_path = Path(args.pdf_path).expanduser().resolve()
     if not pdf_path.exists():
         print(f"未找到PDF: {pdf_path}")
         sys.exit(1)
 
     repo_root = Path(__file__).resolve().parent.parent
     default_output = repo_root / "input" / f"{sanitize_stem(pdf_path.stem)}.json"
-    output_path = Path(sys.argv[2]).resolve() if len(sys.argv) >= 3 else default_output
+    output_path = Path(args.output).expanduser().resolve() if args.output else default_output
 
     data = build_base_json(pdf_path)
+
+    if args.ai_summary:
+        # 用户选择 AI 时，默认尽量填满所有模块字段。
+        fill_mode = args.ai_fill_mode or "all"
+        data, filled = enrich_data(
+            data=data,
+            overwrite=True if fill_mode == "all" else args.ai_overwrite,
+            fill_mode=fill_mode,
+        )
+        print("AI 已回填字段: " + (", ".join(filled) if filled else "无"))
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
