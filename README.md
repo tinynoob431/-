@@ -33,7 +33,54 @@ input/
 output/
 ```
 
----
+## 模板说明
+
+- `templates/literature_note_template.md`：当前默认模板（新版，强调“先看关键内容，细节按需展开”）
+- `generate_note.py` 默认读取该模板生成 Markdown
+
+## 模板结构（定稿）
+
+当前模板采用“先判断价值，再按需看细节”的阅读流：
+
+1. `0. 先看这里`：一句话定位 + 问题/方法/结果 + 是否纳入核心库  
+2. `1. 核心内容（默认只读这里）`：问题与贡献 / 核心思路或构造方式 / 实验结论 / 我的判断与行动  
+3. `2. 关键图表（可选）`：图表来源、类型、说明、回查项  
+4. `3. 进阶细节（按需展开）`：核心设计细节、公式细节、实验细节、可引用素材  
+5. `4. 证据区（按需展开）`：原文证据摘录 + 我的批注/Zotero 批注  
+6. `5. 管理信息（可选）`：标签与文献库信息  
+7. `6. 元数据（仅保留一份）`  
+8. `7. 待复核问题`
+
+## 新增关键字段（相对早期版本）
+
+- `paper_subtype`：论文子类型（survey/method/system/benchmark/dataset/empirical/theory/application；其中实验类统一用 `empirical`）
+- `paper_subtype` 会在 `ai_enrich_json.py` 与 `generate_note.py` 中自动归一化到上述枚举
+- `result_reliability`：实验结论可信度判断
+- `most_important_figure_or_table`：最关键图/表
+- `figure_table_takeaway`：该图/表说明的核心结论
+- `worth_deep_reading`：是否值得细读
+- `value_for_my_research`：对当前研究的价值
+- `what_to_reuse`：可直接借鉴的点
+- `what_to_ignore`：可暂时忽略的点
+
+说明：以上字段已接入 `pdf_to_json.py` / `zotero_to_json.py` 的默认 JSON 结构，并可由 `ai_enrich_json.py` 回填。
+
+## 示例：按定稿模板生成 MemGen
+
+```powershell
+python scripts/generate_note.py input\2DJECDW9_enriched.json
+```
+
+## 生成可靠性规则（已启用）
+
+- `ai_enrich_json.py` 对 `datasets/backbone/baselines/metrics/training_strategy` 等严格事实字段启用“禁止猜测”规则。
+- 严格事实字段若出现“可能/推断/likely/maybe”这类措辞，会自动回退为 `needs-check`。
+- `ai_enrich_json.py` 会优先把 `main_contributions`、`pipeline_flow` 生成成结构化列表，减少“一段话挤满”的问题。
+- 模板中的证据区标题改为“证据摘录 / 原文转述”，避免把转述误标成逐字原文。
+- `generate_note.py` 会自动生成“高优先级待复核”清单，优先提示 DOI、benchmark、backbone、训练策略、主结果表等关键核验项。
+- `generate_note.py` 会自动做格式规范化（主要贡献编号、流程编号、关键图表缺失兜底、进阶细节折叠块、证据短条目），并将正文中的 `needs-check` 统一渲染为“待核查：...”。
+- `generate_note.py` 会自动规整标签风格（如 `llm-agents` -> `llm-agent`）并给出 seed 阶段默认高优先级复核清单，避免漏查关键项。
+- `ai_enrich_json.py` 新增中文化润色后处理：当关键字段英文占比过高时，会二次规范为中文表述（保留实体名与数字，不新增事实）。
 
 ## 一条龙交互模式（推荐）
 

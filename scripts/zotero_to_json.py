@@ -198,56 +198,115 @@ def parse_pdfimages_list(stdout_text):
     return rows
 
 
+def detect_figure_page_from_text(pdf_path, max_pages=8):
+    pdftotext_bin = shutil.which("pdftotext")
+    if not pdftotext_bin:
+        return None
+    best_page = None
+    best_score = -10**9
+    for page in range(1, max_pages + 1):
+        proc = subprocess.run(
+            [pdftotext_bin, "-f", str(page), "-l", str(page), str(pdf_path), "-"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+        )
+        if proc.returncode != 0:
+            continue
+        page_text = (proc.stdout or "").lower()
+        score = 0
+        if re.search(r"\bfigure\s*1\b|\bfig\.?\s*1\b", page_text):
+            score += 200
+        if re.search(r"\bfigure\b|\bfig\.\b", page_text):
+            score += 80
+        if "framework" in page_text or "architecture" in page_text:
+            score += 40
+        score -= abs(page - 2) * 8
+        if page == 1:
+            score -= 30
+        if score > best_score:
+            best_score = score
+            best_page = page
+    if best_score < 0:
+        return 2 if max_pages >= 2 else 1
+    return best_page
+
+
+def render_page_png_fallback(pdf_path, out_dir, page):
+    pdftoppm_bin = shutil.which("pdftoppm")
+    if not pdftoppm_bin:
+        return None, "pdftoppm not found; page-render fallback is unavailable."
+
+    prefix = out_dir / "page_render"
+    proc = subprocess.run(
+        [pdftoppm_bin, "-f", str(page), "-l", str(page), "-png", str(pdf_path), str(prefix)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="ignore",
+    )
+    if proc.returncode != 0:
+        msg = proc.stderr.strip() or proc.stdout.strip() or "pdftoppm render failed"
+        return None, msg
+    candidates = sorted(out_dir.glob("page_render-*.png"))
+    if not candidates:
+        return None, "Page render finished but no PNG was produced."
+    return candidates[0], ""
+
+
 def extract_framework_image_from_pdf(pdf_path, item_key, assets_root, max_pages):
     pdfimages_bin = shutil.which("pdfimages")
-    if not pdfimages_bin:
-        return None, "未找到 pdfimages 命令，请先安装 poppler 后再试。"
 
     out_dir = assets_root / item_key
     out_dir.mkdir(parents=True, exist_ok=True)
     prefix = out_dir / "img"
 
-    list_cmd = [pdfimages_bin, "-f", "1", "-l", str(max_pages), "-list", str(pdf_path)]
-    list_proc = subprocess.run(list_cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
-    if list_proc.returncode != 0:
-        return None, f"pdfimages -list 失败: {list_proc.stderr.strip() or list_proc.stdout.strip()}"
+    if pdfimages_bin:
+        list_cmd = [pdfimages_bin, "-f", "1", "-l", str(max_pages), "-list", str(pdf_path)]
+        list_proc = subprocess.run(list_cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
+        if list_proc.returncode == 0:
+            rows = parse_pdfimages_list(list_proc.stdout)
+            if rows:
+                rows.sort(key=lambda r: (r["area"] - r["page"] * 1000), reverse=True)
+                best = rows[0]
 
-    rows = parse_pdfimages_list(list_proc.stdout)
-    if not rows:
-        return None, "未在前几页检测到可抽取图片。"
+                extract_cmd = [pdfimages_bin, "-f", "1", "-l", str(max_pages), "-png", str(pdf_path), str(prefix)]
+                extract_proc = subprocess.run(extract_cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
+                if extract_proc.returncode == 0:
+                    candidates = list(out_dir.glob("img-*.png"))
+                    if candidates:
+                        chosen = None
+                        for p in candidates:
+                            m = re.search(r"img-(\d+)\.png$", p.name)
+                            if m and int(m.group(1)) == best["num"]:
+                                chosen = p
+                                break
+                        if chosen is None:
+                            chosen = max(candidates, key=lambda p: p.stat().st_size)
 
-    # 评分：优先大图，同时轻微偏好前页。
-    rows.sort(key=lambda r: (r["area"] - r["page"] * 1000), reverse=True)
-    best = rows[0]
+                        final_name = f"framework_p{best['page']:02d}_n{best['num']:03d}.png"
+                        final_path = out_dir / final_name
+                        if final_path.exists():
+                            final_path.unlink()
+                        chosen.replace(final_path)
 
-    extract_cmd = [pdfimages_bin, "-f", "1", "-l", str(max_pages), "-png", str(pdf_path), str(prefix)]
-    extract_proc = subprocess.run(extract_cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
-    if extract_proc.returncode != 0:
-        return None, f"pdfimages 抽图失败: {extract_proc.stderr.strip() or extract_proc.stdout.strip()}"
+                        relative = Path("assets") / item_key / final_name
+                        return relative.as_posix(), f"Auto extracted from PDF page {best['page']} image {best['num']}"
 
-    candidates = list(out_dir.glob("img-*.png"))
-    if not candidates:
-        return None, "抽图完成但未找到 PNG 文件。"
+    # fallback for vector-only PDFs (no embedded raster image)
+    page = detect_figure_page_from_text(pdf_path, max_pages=max_pages) or (2 if max_pages >= 2 else 1)
+    rendered, err = render_page_png_fallback(pdf_path, out_dir, page)
+    if rendered:
+        final_name = f"framework_page_{page:02d}_render.png"
+        final_path = out_dir / final_name
+        if final_path.exists():
+            final_path.unlink()
+        rendered.replace(final_path)
+        relative = Path("assets") / item_key / final_name
+        return relative.as_posix(), f"Rendered PDF page {page} as fallback (vector figure likely)."
 
-    # 文件名通常是 img-000.png，对应 num。
-    chosen = None
-    for p in candidates:
-        m = re.search(r"img-(\d+)\.png$", p.name)
-        if not m:
-            continue
-        if int(m.group(1)) == best["num"]:
-            chosen = p
-            break
-    if chosen is None:
-        chosen = max(candidates, key=lambda p: p.stat().st_size)
-
-    final_name = f"framework_p{best['page']:02d}_n{best['num']:03d}.png"
-    final_path = out_dir / final_name
-    chosen.replace(final_path)
-
-    # 输出相对路径，便于 Obsidian 使用
-    relative = Path("assets") / item_key / final_name
-    return relative.as_posix(), f"Auto extracted from PDF page {best['page']} image {best['num']}"
+    return None, f"Figure extraction failed: {err}"
 
 
 def build_payload(item_data, item_key, pdf_key, annotations):
@@ -264,6 +323,7 @@ def build_payload(item_data, item_key, pdf_key, annotations):
         "venue": pick_venue(item_data),
         "doi": doi,
         "paper_type": "method",
+        "paper_subtype": DEFAULT_VALUE,
         "status": "seed",
         "abstract": (item_data.get("abstractNote") or "").strip() or DEFAULT_VALUE,
         "zotero_item_key": item_key,
@@ -318,6 +378,9 @@ def build_payload(item_data, item_key, pdf_key, annotations):
         "baselines": DEFAULT_VALUE,
         "metrics": DEFAULT_VALUE,
         "main_results_table_or_text": DEFAULT_VALUE,
+        "result_reliability": DEFAULT_VALUE,
+        "most_important_figure_or_table": DEFAULT_VALUE,
+        "figure_table_takeaway": DEFAULT_VALUE,
         "ablation_results": DEFAULT_VALUE,
         "efficiency_cost": DEFAULT_VALUE,
         "error_analysis": DEFAULT_VALUE,
@@ -345,6 +408,10 @@ def build_payload(item_data, item_key, pdf_key, annotations):
             else f"- Zotero item key: {item_key}\n- PDF key: {pdf_key}\n- 批注摘录: {DEFAULT_VALUE}"
         ),
         "core_library_review_plan": DEFAULT_VALUE,
+        "worth_deep_reading": DEFAULT_VALUE,
+        "value_for_my_research": DEFAULT_VALUE,
+        "what_to_reuse": DEFAULT_VALUE,
+        "what_to_ignore": DEFAULT_VALUE,
         "my_assessment": DEFAULT_VALUE,
         "open_questions": DEFAULT_VALUE,
         "next_actions": DEFAULT_VALUE,

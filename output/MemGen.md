@@ -1,156 +1,218 @@
 ---
 title: "MemGen: Weaving Generative Latent Memory for Self-Evolving Agents"
 aliases: ["MemGen"]
-tags: ["method"]
+tags: ["method", "llm-agent", "agent-memory", "latent-memory", "generative-memory", "self-evolution", "self-evolving-agents"]
 
 zotero_item_key: "2DJECDW9"
 pdf_key: "needs-check"
 doi: "needs-check"
 year: "2025"
-venue: "arXiv preprint"
+venue: "needs-check"
 authors: ["Guibin Zhang", "Muxin Fu", "Shuicheng Yan"]
 paper_type: "method"
+paper_subtype: "method" # survey/method/system/benchmark/dataset/empirical/theory/application
 status: "seed" # seed / skimmed / read / cited
 
 zotero_collections: ["needs-check"]
 zotero_tags: ["needs-check"]
-canonical_tags: ["needs-check"]
-candidate_tags: ["needs-check"]
+canonical_tags: ["agent-memory", "latent-memory", "llm-agent", "self-evolving-agents", "generative-memory"]
+candidate_tags: ["agent-memory", "latent-memory", "llm-agent", "self-evolving-agents", "generative-memory", "memory-trigger", "memory-weaver", "latent-token"]
 
 core_library_decision: "candidate" # candidate / include / exclude
-core_library_reason: "提出新型生成式潜在记忆机制，性能超越现有方法，展现出人类认知特征，对智能体自我进化研究有重要启发。"
-research_relation: "与研究方向高度相关，都关注LLM智能体的记忆增强和自我进化。"
+core_library_reason: "提出新颖的生成式隐记忆范式，性能出色，并涌现出计划记忆、程序记忆等类人特质，潜力较大。"
+research_relation: "拓展了隐式记忆研究，通过在推理中动态生成记忆令牌，弥合参数记忆与检索记忆的鸿沟。"
 ---
 
 # MemGen: Weaving Generative Latent Memory for Self-Evolving Agents
 
-## 核心简介
-> 先写清“问题链”：要解决什么关键问题、瓶颈在哪里、本文方法与贡献是什么。每条都尽量绑定证据来源（section / table / figure / page）。
+## 0. 先看这里
+> [!abstract]
+> **一句话定位**：MemGen提出一种动态生成记忆框架，在LLM推理过程中穿插生成隐式记忆令牌，使智能体借助类人记忆能力自我进化。
+> **论文类型**：method
+> **问题**：现有参数记忆会灾难性遗忘，检索记忆依赖僵硬的上下文工程，均无法实现人类般与推理融为一体的记忆。
+> **方法**：MemGen is a dynamic generative memory framework that interleaves latent memory tokens into LLM agent reasoning via a Memory Trigger（记忆触发器） and a Memory Weaver（记忆编织器）, enabling self-evolving problem-solving.
+> **结果**：Surpasses leading external memory systems ExpeL and AWM by up to 38.22%, exceeds GRPO by up to 13.44%, and exhibits strong cross-domain generalization across eight benchmarks.
+> **是否纳入核心库**：`candidate`
+> **理由**：提出新颖的生成式隐记忆范式，性能出色，并涌现出计划记忆、程序记忆等类人特质，潜力较大。
+> **为什么读**：探索更贴近人类认知的智能体记忆机制，实现记忆与推理的深度交织，实验效果显著且记忆行为自发分化。
 
-| 维度 | 内容 | 证据 |
-| --- | --- | --- |
-| 关键问题 | 现有智能体记忆方法无法实现类似人类的记忆与推理的紧密交织，限制自我进化能力。 | Existing paradigms remain constrained: parametric memory forcibly adjusts model parameters, and retrieval-based memory externalizes experience into structured databases, yet neither captures the fluid interweaving of reasoning and memory that underlies human cognition. |
-| 核心瓶颈 | 参数记忆导致灾难性遗忘，检索记忆受限于上下文工程，缺乏认知流畅性。 | 参数记忆导致灾难性遗忘（‘catastrophic forgetting, i.e., the erosion of general knowledge’），检索记忆依赖上下文工程，无法实现无缝内部融合（‘its efficacy is fundamentally tethered to context engineering... without achieving the fluid, seamless integration characteristic of truly internalized memory’）。 |
-| 其他做法 | 参数记忆（FireAct, AgentLumos等），检索记忆（ExpeL, AWM等），潜在记忆（Coconut, CoDI等）。 | 对比方法包括外部记忆系统ExpeL和AWM，以及RL方法GRPO（参见摘要：‘surpasses leading external memory systems such as ExpeL and AWM by up to 38.22%, exceeds GRPO by up to 13.44%’）；参数记忆方法如FireAct、AgentLumos（引言及相关工作）；检索记忆方法如存储原始轨迹、高级经验、压缩技能等。 |
-| 本文方法 | MemGen通过在推理过程中动态插入生成式潜在token序列作为记忆，实现记忆与认知的深度交织。 | It consists of a memory trigger, which monitors the agent’s reasoning state to decide explicit memory invocation, and a memory weaver, which takes the agent’s current state as stimulus to construct a latent token sequence as machine-native memory to enrich its reasoning. |
-| 主要贡献 | 提出MemGen，一种动态生成式潜在记忆框架，实现了推理与记忆的紧密交织；在8个基准上显著超越外部记忆系统和GRPO；无需显式监督，自发演化出类似人类的规划记忆、程序记忆和工作记忆能力。 | More importantly, we find that without explicit supervision, MemGen spontaneously evolves distinct human-like memory faculties, including planning memory, procedural memory, and working memory, suggesting an emergent trajectory toward more naturalistic forms of machine cognition. |
-| 关键结果 | 在八个基准上，MemGen超越ExpeL和AWM最高38.22%，超过GRPO最高13.44%，并展现强跨领域泛化能力。 | MemGen surpasses leading external memory systems such as ExpeL and AWM by up to 38.22%, exceeds GRPO by up to 13.44%, and exhibits strong cross-domain generalization ability. |
-| 适用场景 | 基于当前信息推断：适用于需要从环境交互中自我进化的LLM代理任务，如工具调用、规划、问答、多步推理等。 | needs-check |
-| 主要限制 | 基于当前信息推断：潜在记忆可解释性不足；可能需要额外训练记忆模块，增加计算开销；仅在特定基准上验证，泛化到其他任务的鲁棒性未知。 | needs-check |
+## 1. 核心内容（默认只读这里）
 
-## 一句话定位
-MemGen提出一种动态生成式潜在记忆框架，通过记忆触发器和编织器实现推理与记忆的流畅交织，显著提升智能体性能并涌现出人类般的记忆功能。
+### 1.1 问题与贡献
+- 核心问题：现有参数记忆会灾难性遗忘，检索记忆依赖僵硬的上下文工程，均无法实现人类般与推理融为一体的记忆。
+- 核心瓶颈：参数记忆修改参数导致遗忘，检索记忆仅外部化经验，缺乏原生内化与推理的紧耦合。
+- 相比已有方法：参数记忆（FireAct、AgentLumos等）、检索记忆（ExpeL、AWM、G-Memory）、隐记忆（Wang等、Hu等）及隐式计算（Coconut、CODI、LatentR3）。
 
-## 方法主图 / Framework
+**主要贡献：**
+1. Identifies that existing parametric and retrieval-based memory paradigms fail to capture the fluid interweaving of reasoning and memory in human cognition.
+2. Proposes MemGen with a Memory Trigger（记忆触发器） (for adaptive invocation) and a Memory Weaver（记忆编织器） (for generating latent memory tokens), achieving token-level memory integration.
+3. Demonstrates significant performance improvements over baselines (up to 38.22% over ExpeL/AWM, 13.44% over GRPO) across eight benchmarks.
+4. Shows emergent human-like memory faculties (planning, procedural, working memory) without explicit supervision, indicating a path toward more naturalistic machine cognition.
+
+**主要局限：**
+待核查：当前摘录未看到作者明确局限，需查看 limitation/discussion。
+
+### 1.2 核心思路 / 构造方式（方法论文可按方法主线填写）
+- 核心思路：Integrate a generative latent memory into LLM agent reasoning at the token level, enabling dynamic, context-sensitive memory recall that weaves memory and cognition together, leading to emergent memory faculties.
+- 关键设计：
+  - Memory Trigger（记忆触发器）
+  - Memory Weaver（记忆编织器）
+  - and the base LLM agent.
+- 流程概览：
+  1. Agent begins generating a reasoning step tokens.
+  2. Memory Trigger（记忆触发器） evaluates the current reasoning state to decide whether to invoke memory.
+  3. If triggered, Memory Weaver（记忆编织器） generates a sequence of latent memory tokens conditioned on the state and past experiences.
+  4. Generated latent token（潜在 token） are inserted into the token stream, enriching the context for subsequent reasoning.
+  5. The agent continues reasoning with the augmented context; steps may repeat as needed.
+  6. The process outputs the final Action（行动） or answer.
+- 输入 / 数据来源：A task query and the agent's current context/state (e.g; previous reasoning steps, environment observations), along with access to a history of past experiences (trajectories) for memory generation.
+- 输出 / 评估对象：The agent's actions or final answer, generated with interleaved latent memory tokens.
+
+### 1.3 实验结论
+- 数据集 / Benchmark：待核查：摘要未完整给出数据集细节，需查看实验部分。
+- Baselines：ExpeL, AWM, GRPO
+- Metrics：待核查：当前摘录未完整说明指标定义，需查看实验设置部分。
+- 主结果：MemGen surpasses leading external memory systems such as ExpeL and AWM by up to 38.22%, exceeds GRPO by up to 13.44% across eight benchmarks, and exhibits strong cross-domain generalization.
+- 可信度判断：中等偏高：当前结果在基准对比中表现积极，但仍需回查指标定义、方差/显著性与完整实验设置。
+- 最关键图/表：Figure 2 (overview of MemGen architecture)
+- 它说明了什么：MemGen interleaves reasoning and memory via a Memory Trigger（记忆触发器） and weaver, generating latent token（潜在 token） sequences as dynamic memory at fine-grained, token-level granularity.
+- 效率 / 成本：待核查：需查看效率与成本对比。
+
+### 1.4 我的判断与行动
+- 值不值得细读：是，但需先补实验设置与训练细节。
+- 对我当前研究的价值：如果研究方向涉及LLM智能体的自适应记忆或认知机制，本文的动态生成式隐记忆思路有较高参考价值，尤其是记忆与推理交织的设计。
+- 可以借鉴的点：记忆触发器与编织器的架构思想；隐记忆序列作为机器原生记忆的生成方式；自评估记忆调用策略；多层次记忆自发涌现的发现。
+- 暂时不用管的点：具体的RL训练细节若与自身任务不相关可暂略；跨领域基准结果可仅关注通用趋势。
+
+**下一步行动：**
+1. 快速浏览方法图与算法伪代码，明确架构全貌。
+2. 若决定深入，则精读第4章方法细节，并复现核心组件。
+3. 调研隐空间计算与记忆的更多相关工作（如Coconut、LaRS等）。
+4. 评估将MemGen应用于自身任务的可行性。
+
+## 2. 关键图表（可选）
 ![[assets/2DJECDW9/framework_p08_n044.png]]
 
-| 项目 | 内容 |
-| --- | --- |
-| 图来源 | Auto extracted from PDF page 8 image 44 |
-| 图类型 | framework / architecture / pipeline (needs-check) |
-| 核心模块 | memory trigger, memory weaver |
-| 数据流 / 推理流 | 1. Agent接收当前状态st和任务。2. Memory Trigger监控推理状态，决定是否调用记忆。3. 若触发，Memory Weaver以st为刺激，生成潜在记忆token序列mt。4. 将mt插入到agent的推理上下文中（作为额外的输入token）。5. Agent基于增强的状态生成动作at。6. 执行at，环境更新到st+1。7. 重复直到任务完成。 |
-| 这张图说明了什么 | MemGen是一个生成式记忆框架，让LLM代理在推理过程中动态生成潜在记忆token，模拟人类认知中记忆与推理的紧密交织。它包含一个记忆触发器来决定何时调用记忆，以及一个记忆编织器来生成机器原生的潜在记忆序列，这些记忆插入到推理过程中以丰富认知。 |
-| 需要回查 | False |
+- 图/表来源：Auto extracted from PDF page 8 image 44
+- 图/表类型：framework / architecture / pipeline (待核查)
+- 图/表说明：
+  - 结构：由 Memory Trigger（记忆触发器）和 Memory Weaver（记忆编织器）组成。
+  - 过程：触发器判断是否调用记忆，编织器生成 latent token（潜在 token），并插入推理流。
+  - 意义：将记忆从外部检索式附加转为推理过程中的 token 级内生交织。
+- 需回查项：否
 
-## 方法速写
+## 3. 进阶细节（按需展开）
+> [!info]- 核心设计细节
+> - 训练策略 / 构造流程：待核查：需回查方法与训练章节。
+> - 推理流程 / 评估流程：The agent's reasoning is interleaved with memory: a Memory Trigger（记忆触发器） monitors the reasoning state and decides when to invoke memory; a Memory Weaver（记忆编织器） constructs a latent token（潜在 token） sequence from the current state，which is inserted into the reasoning process at fine-grained，token-level granularity. This yields a tightly interwoven cycle of memory and cognition.
+> - 假设条件：待核查：假设包括可交互环境、奖励信号、token 级记忆调用与跨任务迁移能力，需回查原文。
+> - 关键部分1：Memory Trigger（记忆触发器）: monitors the agent’s reasoning state and decides when to invoke latent memory.
+> - 关键部分2：Memory Weaver（记忆编织器）: takes the agent’s current state and history to generate a latent token（潜在 token） sequence that augments the reasoning context.
 
-### 任务设定
-- 输入 / 环境 / 数据：当前状态st（文本描述），可能包含任务查询、历史交互和上下文。
-- 输出 / 目标：代理生成的动作序列at，以及潜在记忆token序列（作为中间输出），最终输出为任务结果或答案。
-- 约束 / 假设：LLM能够利用潜在token作为记忆载体；记忆触发基于推理状态有效；潜在记忆空间可以编码可迁移的通用经验；环境提供奖励信号用于优化。
+> [!info]- 公式与算法细节
+> $$
+> z_{t,j} \sim \pi_\theta(\cdot \mid s_t, z_{t,<j})
+> $$
+>
+> $$
+> \max_{\theta,M} \mathbb{E}_{x \sim D,\, \tau \sim \pi_{\theta,M}}[R(\tau)]
+> $$
+>
+> $$
+> m_t = f_M(s_t, H, m_{<t})
+> $$
+>
+> - 符号说明：
+>   - equation_index：1；symbols：z_{t,j}: the j-th token of Action（行动） a_t; π_θ: policy; s_t: environment state at step t; z_{t,<j}: preceding tokens in the Action（行动）; equation_index：2；symbols：θ: policy parameters; M: memory system; D: task distribution; x: task; τ: trajectory; R: reward; equation_index：3；symbols：m_t: memory at step t; s_t: current state; H: history of past experiences; m_{<t}: previous memories.
+> - 公式作用：
+>   - equation_index：1；role：Defines the generation of Action（行动） tokens by the agent's policy; equation_index：2；role：Formalizes the overall optimization problem: jointly maximize expected reward by training policy and memory system; equation_index：3；role：Describes the general memory generation function, adaptable to different invocation granularities (task-level, step-level, token-level). MemGen's innovation is a more fine-grained, token-level invocation.
+> - 与 baseline 差异：待核查：需回查原文。
 
-### 核心机制
-- 模块 1：Memory Trigger
-- 模块 2：Memory Weaver
-- 训练流程：基于当前信息推断：使用强化学习（可能基于GRPO）联合优化代理策略πθ和记忆系统M，最大化期望奖励。记忆系统自发进化，无需显式监督信号。
-- 推理流程：加载训练好的Memory Weaver和代理模型。推理时，代理逐步处理输入状态，Memory Trigger根据模型隐藏状态或输出决定是否调用记忆；若调用，Memory Weaver生成潜在token，插入到代理的上下文中；代理基于增强的上下文继续生成动作。此过程可重复多次。
+> [!info]- 实验细节
+> - 模型 / Backbone：待核查：当前摘录未明确骨干模型，需查看 setup 或 appendix。
+> - 消融实验：待核查：需查看消融实验章节。
+> - 失败案例 / 边界：Not provided in abstract or excerpt; paper may contain qualitative analysis of emergent memory faculties, but no explicit failure cases.
+> - 数据集证据：待核查：需回查原文。
+> - Backbone证据：待核查：需回查原文。
+> - Baseline证据：Abstract: 'surpasses leading external memory systems such as ExpeL and AWM ... exceeds GRPO'
+> - 指标证据：待核查：需回查原文。
+> - 主结果证据：Abstract: 'up to 38.22% over ExpeL/AWM, 13.44% over GRPO'
+> - 消融证据：待核查：需回查原文。
+> - 效率证据：待核查：需回查原文。
+> - 失败证据：待核查：需回查原文。
 
-### 公式 / 算法
-1. \(z_{t,j} \sim \pi_\theta(\cdot | s_t, z_{t,<j})\); 2. \(\max_{\theta,M} \mathbb{E}_{x\sim D, \tau\sim\pi_\theta,M} [R(\tau)]\); 3. \(m_t = f_M(s_t, H, m_{<t})\)
+> [!info]- 可引用素材（写作时再看）
+> - 背景：LLM驱动的智能体需要记忆机制，以从环境交互中逐步学习和进化。现有主要范式包括参数化记忆和检索式记忆。参数化记忆通过微调模型参数内化经验，但容易导致灾难性遗忘；检索式记忆将经验存储于外部数据库，但仅是上下文注入，缺乏推理与记忆的有机融合。
+> - 背景来源：摘要和第1节：'Existing paradigms remain constrained: parametric memory forcibly adjusts model parameters, and retrieval-based memory externalizes experience into structured databases, yet neither captures the fluid interweaving of reasoning and memory that underlies human cognition.' 以及第1节对两种范式的详细描述。
+> - Gap：现有记忆范式未能模拟人类认知中推理与记忆交织的流式过程，无法实现自然的内隐记忆生成与动态融合。
+> - Gap来源：摘要中的gap陈述：'neither captures the fluid interweaving of reasoning and memory that underlies human cognition'
+> - 方法比较：MemGen提出动态生成式隐记忆框架，包含记忆触发器与记忆编织器，在推理过程中逐token生成隐记忆序列，实现记忆与推理的紧密交织。相比ExpeL、AWM等检索式外部记忆系统，最高提升38.22%；比GRPO提升13.44%。
+> - 方法比较来源：摘要：'...MemGen surpasses leading external memory systems such as ExpeL and AWM by up to 38.22%, exceeds GRPO by up to 13.44%...' 以及方法章节对记忆编织过程的描述。
+> - 实验证据：在8个基准上评估，MemGen在多个领域表现出显著性能提升，并展现出跨领域泛化能力。无显式监督下，自发涌现出类似人类的规划记忆、程序记忆和工作记忆等多类记忆能力。
+> - 实验证据来源：摘要：'Extensive experiments across eight benchmarks show that MemGen surpasses... More importantly, we find that without explicit supervision, MemGen spontaneously evolves distinct human-like memory faculties, including planning memory, procedural memory, and working memory...'
+> - 局限：待核查：需回查原文。
+> - 局限来源：待核查：需回查原文。
 
-- 符号说明：\(z_{t,j}\)：第t步的第j个潜在记忆token；\(s_t\)：智能体状态；\(\pi_\theta\)：策略网络；\(R(\tau)\)：轨迹奖励；\(m_t\)：记忆表示；\(f_M\)：记忆生成函数；\(H\)：历史经验
-- 这一部分解决的问题：方程(1)定义潜在记忆token的生成过程；方程(2)为联合优化策略和记忆系统的最大化期望奖励目标；方程(3)定义了动态记忆生成的通用形式。
-- 与 baseline 的关键差异：与基线方法相比，MemGen在token级别动态生成和插入记忆，而ExpeL等任务级别或步骤级别记忆调用。方程(3)的粒度更细。
+## 4. 证据区（按需展开）
+> [!quote]- 证据摘录 / 原文转述
+> - **问题背景**：Parametric memory (e.g; fine-tuning) leads to catastrophic forgetting; retrieval-based memory (e.g; ExpeL, AWM) externalizes experiences but fails to achieve fluid, seamless integration of memory and reasoning, as context is rigidly inserted.
+>   来源：Abstract / Introduction
+>
+> - **核心瓶颈**：The core bottleneck is the lack of a memory mechanism that can be invoked dynamically and integratively during reasoning, akin to human cognition, to provide context without disrupting the reasoning flow.
+>   来源：Abstract / Introduction
+>
+> - **已有方法对比**：Parametric memory approaches (FireAct, AgentLumos) update model parameters; retrieval-based memory systems store and retrieve experiences (ExpeL, AWM, G-Memory) or skills (AgentKB); prior latent memory methods exist but are not as tightly interwoven.
+>   来源：Related Work / Introduction
+>
+> - **方法组成**：MemGen consists of a Memory Trigger（记忆触发器） that monitors the agent’s reasoning state to decide when to invoke memory, and a Memory Weaver（记忆编织器） that generates a latent token（潜在 token） sequence conditioned on the current state. These latent token（潜在 token） are inserted at the token level into the reasoning stream, creating a fine-grained interleaving of memory and cognition.
+>   来源：Abstract / Method
+>
+> - **主要贡献**：The main contributions are (1) identifying the limitation of existing memory paradigms; (2) proposing MemGen with the trigger-weaver architecture and dynamic token-level integration; (3) comprehensive experiments showing state-of-the-art performance; (4) discovering emergent memory specializations analogous to human memory types.
+>   来源：Abstract / Introduction
+>
+> - **主结果**：On eight benchmarks, MemGen outperforms ExpeL and AWM by up to 38.22% and GRPO by up to 13.44%. It demonstrates strong cross-domain generalization. Emergent analysis reveals spontaneous development of planning, procedural, and working memory without supervision.
+>   来源：Abstract / Experiments
 
-## 实验与结果
-| 项目 | 内容 | 证据 |
-| --- | --- | --- |
-| 数据集 / Benchmark | 基于当前信息推断：八个基准测试，但片段未列出具体名称。 | needs-check |
-| 模型 / Backbone | 基于当前信息推断：使用预训练LLM作为智能体主干，但未指定具体模型。 | needs-check |
-| Baselines | ExpeL, AWM, GRPO | 论文摘要明确提及：'surpasses leading external memory systems such as ExpeL and AWM by up to 38.22%, exceeds GRPO by up to 13.44%'。 |
-| Metrics | 基于当前信息推断：可能使用任务成功率或奖励，具体指标未明确。 | needs-check |
-| 主结果 | MemGen surpasses leading external memory systems such as ExpeL and AWM by up to 38.22%, exceeds GRPO by up to 13.44%, and exhibits strong cross-domain generalization ability. | 摘要中的结果陈述：'MemGen surpasses leading external memory systems such as ExpeL and AWM by up to 38.22%, exceeds GRPO by up to 13.44%'。 |
-| 消融实验 | 基于当前信息推断：未在片段中提供消融实验细节。 | needs-check |
-| 效率 / 成本 | 基于当前信息推断：未在片段中提供效率或成本信息。 | needs-check |
-| 失败案例 / 局限 | 基于当前信息推断：未在片段中提供错误分析。 | needs-check |
+> [!note]- 我的批注 / Zotero 批注
+> - Zotero item key: 2DJECDW9
+> - PDF key: 待核查
+> - 批注摘录：待核查：需回填 Zotero 真实批注。
 
-## 复现与可信度检查
-| 检查项 | 记录 |
-| --- | --- |
-| 数据划分是否清晰（train/val/test） | needs-check |
-| 随机种子与运行次数 | needs-check |
-| 超参数范围与选择策略 | needs-check |
-| 训练硬件 / 软件环境 | needs-check |
-| 统计显著性 / 方差报告 | needs-check |
-| 代码可用性 | needs-check |
-| 数据可用性 | needs-check |
-| 复现风险点 | needs-check |
+## 5. 管理信息（可选）
+> [!info]- 标签与文献库信息
+> - 标准标签：agent-memory, latent-memory, llm-agent, self-evolving-agents, generative-memory
+> - 候选标签：agent-memory, latent-memory, llm-agent, self-evolving-agents, generative-memory, memory-trigger, memory-weaver, latent-token
+> - 当前标签：method, llm-agent, agent-memory, latent-memory, generative-memory, self-evolution, self-evolving-agents
+> - 研究关系：拓展了隐式记忆研究，通过在推理中动态生成记忆令牌，弥合参数记忆与检索记忆的鸿沟。
 
-## 可引用材料
-> 用于 related work / introduction / method comparison，尽量附来源。
-
-| 用途 | 可引用内容 | 来源 |
-| --- | --- | --- |
-| 背景 | Existing paradigms remain constrained: parametric memory forcibly adjusts model parameters, and retrieval-based memory externalizes experience into structured databases, yet neither captures the fluid interweaving of reasoning and memory that underlies human cognition. | 论文摘要 |
-| Gap | Existing memory paradigms fail to capture the fluid interweaving of reasoning and memory that underlies human cognition. | 论文摘要 |
-| 方法比较 | MemGen 是一种动态生成式记忆框架，通过记忆触发器和记忆编织器在推理过程中交织生成潜在记忆 tokens，与外部记忆系统（如 ExpeL 和 AWM）相比性能提升最高 38.22%，超过 GRPO 达 13.44%，并展现跨域泛化能力。 | 摘要中明确提到 'MemGen surpasses leading external memory systems such as ExpeL and AWM by up to 38.22%, exceeds GRPO by up to 13.44%' |
-| 实验证据 | 在 8 个基准上进行广泛实验，与 ExpeL、AWM、GRPO 等对比，性能显著提升；MemGen 还自发涌现计划记忆、程序记忆和工作记忆等类人记忆能力。 | 摘要及正文中描述了8个基准上的实验比较及涌现出的人类记忆类型 |
-| 局限 | 基于当前信息推断：潜在记忆的可解释性有限，未明确讨论计算开销和对模型架构的依赖；论文未提及局限性。 | needs-check |
-
-## Zotero 批注与原文证据
-- Zotero item key: 2DJECDW9
-- PDF key: needs-check
-- 批注摘录: needs-check
-
-## 个人核心文献库维护
-- 与我研究主线关系：与研究方向高度相关，都关注LLM智能体的记忆增强和自我进化。
-- 是否纳入核心库：candidate
-- 纳入/排除理由：提出新型生成式潜在记忆机制，性能超越现有方法，展现出人类认知特征，对智能体自我进化研究有重要启发。
-- 复核计划：include
-
-## 我的判断
-论文创新性地将潜在记忆与推理过程交织，模拟人类认知，性能提升显著，且有开放代码，值得纳入核心库；但缺乏理论分析和局限性讨论。
-
-## 待复核清单
-- [ ] 关键结果是否来自完整实验表格而非 abstract 概述？
-- [ ] Baseline 是否公平（同数据、同预算、同评测协议）？
-- [ ] 公式 / 算法步骤是否已回看原文并可复现？
-- [ ] 是否记录了至少一个失败案例或边界条件？
-- [ ] 我是否明确写出该论文与当前课题的直接关系？
-
-## 待复核问题
-- 潜在记忆的生成是否特定于某些 LLM 架构？
-- 跨域泛化的具体边界是什么？
-- 计算开销与推理延迟是否可接受？
-- 记忆触发机制如何避免错误触发或遗漏？
-- 涌现的记忆类型是否稳定可复现？
-- 如何与持续性参数记忆结合？
-
-## 后续行动
-1. 查阅 MemGen 代码仓库以验证实现细节。
-2. 对比其他潜在记忆方法（如 Coconut）深入理解差异。
-3. 关注实验结果中的具体基准名称和设置。
-4. 评估是否适用于我的研究场景。
-
-## 元数据
+## 6. 元数据（仅保留一份）
 | 项目 | 内容 |
 | --- | --- |
 | Authors | Guibin Zhang, Muxin Fu, Shuicheng Yan |
 | Year | 2025 |
-| Venue | arXiv preprint |
-| DOI | needs-check |
+| Venue | 待核查：需回查原文。 |
+| DOI | 待核查：需回查原文。 |
 | Zotero item key | 2DJECDW9 |
-| PDF key | needs-check |
-| Zotero collections | needs-check |
-| Zotero tags | needs-check |
+| PDF key | 待核查：需回查原文。 |
+| Zotero collections | 待核查：需从 Zotero 同步。 |
+| Zotero tags | 待核查：需从 Zotero 同步。 |
+
+## 7. 待复核问题
+### 高优先级待复核
+- DOI / arXiv ID
+- 8 个 benchmark 的具体名称
+- Backbone / base model
+- Memory Trigger 的训练方式与触发判定机制
+- Memory Weaver 的结构与 latent token 生成方式
+- latent token 如何插入推理流
+- 训练策略与优化目标
+- 主评测指标定义
+- 主结果表与关键数字
+- 消融实验与效率成本
+- 失败案例与局限原文出处
+
+### 其他待复核问题
+- 隐记忆序列的生成如何避免噪声累积，是否影响推理稳定性？
+- 在不同规模的LLM上，记忆编织器的迁移性如何？
+- 隐记忆的实际可解释性如何，能否可视化或对齐到具体语义？
+- 训练过程中如何平衡记忆与推理的联合优化？
