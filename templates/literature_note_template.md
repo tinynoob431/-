@@ -10,6 +10,7 @@ year: "{{year}}"
 venue: "{{venue}}"
 authors: {{authors_yaml}}
 paper_type: "{{paper_type}}"
+paper_subtype: "{{paper_subtype}}" # survey/method/system/benchmark/dataset/empirical/theory/application
 status: "{{status}}" # seed / skimmed / read / cited
 
 zotero_collections: {{zotero_collections_yaml}}
@@ -24,123 +25,93 @@ research_relation: "{{research_relation}}"
 
 # {{title}}
 
-## 核心简介
-> 先写清“问题链”：要解决什么关键问题、瓶颈在哪里、本文方法与贡献是什么。每条都尽量绑定证据来源（section / table / figure / page）。
+## 0. 先看这里
+> [!abstract]
+> **一句话定位**：{{one_sentence_summary}}  
+> **论文类型**：{{paper_subtype}}  
+> **问题**：{{core_problem}}  
+> **方法**：{{method_one_liner}}  
+> **结果**：{{headline_results}}  
+> **是否纳入核心库**：`{{core_library_decision}}`  
+> **理由**：{{core_library_reason}}  
+> **为什么读**：{{why_read}}
 
-| 维度 | 内容 | 证据 |
-| --- | --- | --- |
-| 关键问题 | {{core_problem}} | {{evidence_core_problem}} |
-| 核心瓶颈 | {{core_bottleneck}} | {{evidence_core_bottleneck}} |
-| 其他做法 | {{other_methods}} | {{evidence_other_methods}} |
-| 本文方法 | {{method_one_liner}} | {{evidence_method}} |
-| 主要贡献 | {{main_contributions}} | {{evidence_contributions}} |
-| 关键结果 | {{headline_results}} | {{evidence_results}} |
-| 适用场景 | {{application_scenarios}} | {{evidence_scenarios}} |
-| 主要限制 | {{main_limitations}} | {{evidence_limitations}} |
+## 1. 核心内容（默认只读这里）
 
-## 一句话定位
-{{one_sentence_summary}}
+### 1.1 问题与贡献
+- 核心问题：{{core_problem}}
+- 核心瓶颈：{{core_bottleneck}}
+- 相比已有方法：{{other_methods}}
 
-## 方法主图 / Framework
-![[{{framework_image_path}}]]
+**主要贡献：**
+{{main_contributions_numbered}}
 
-| 项目 | 内容 |
-| --- | --- |
-| 图来源 | {{framework_source}} |
-| 图类型 | {{framework_type}} |
-| 核心模块 | {{core_modules}} |
-| 数据流 / 推理流 | {{pipeline_flow}} |
-| 这张图说明了什么 | {{framework_explanation}} |
-| 需要回查 | {{framework_needs_check}} |
+**主要局限：**  
+{{main_limitations}}
 
-## 方法速写
+### 1.2 核心思路 / 构造方式（方法论文可按方法主线填写）
+- 核心思路：{{method_idea}}
+- 关键设计：
+{{core_modules_bulleted}}
+- 流程概览：
+{{pipeline_flow_indented}}
+- 输入 / 数据来源：{{task_input}}
+- 输出 / 评估对象：{{task_output}}
 
-### 任务设定
-- 输入 / 环境 / 数据：{{task_input}}
-- 输出 / 目标：{{task_output}}
-- 约束 / 假设：{{assumptions}}
+### 1.3 实验结论
+- 数据集 / Benchmark：{{datasets}}
+- Baselines：{{baselines}}
+- Metrics：{{metrics}}
+- 主结果：{{main_results_table_or_text}}
+- 可信度判断：{{result_reliability}}
+- 最关键图/表：{{most_important_figure_or_table}}
+- 它说明了什么：{{figure_table_takeaway}}
+- 效率 / 成本：{{efficiency_cost}}
 
-### 核心机制
-- 模块 1：{{module_1}}
-- 模块 2：{{module_2}}
-- 训练流程：{{training_strategy}}
-- 推理流程：{{inference_pipeline}}
+### 1.4 我的判断与行动
+- 值不值得细读：{{worth_deep_reading}}
+- 对我当前研究的价值：{{value_for_my_research}}
+- 可以借鉴的点：{{what_to_reuse}}
+- 暂时不用管的点：{{what_to_ignore}}
 
-### 公式 / 算法
-{{key_equations}}
-
-- 符号说明：{{equation_symbols}}
-- 这一部分解决的问题：{{equation_role}}
-- 与 baseline 的关键差异：{{equation_vs_baseline}}
-
-## 实验与结果
-| 项目 | 内容 | 证据 |
-| --- | --- | --- |
-| 数据集 / Benchmark | {{datasets}} | {{evidence_datasets}} |
-| 模型 / Backbone | {{backbone}} | {{evidence_backbone}} |
-| Baselines | {{baselines}} | {{evidence_baselines}} |
-| Metrics | {{metrics}} | {{evidence_metrics}} |
-| 主结果 | {{main_results_table_or_text}} | {{evidence_main_results}} |
-| 消融实验 | {{ablation_results}} | {{evidence_ablation}} |
-| 效率 / 成本 | {{efficiency_cost}} | {{evidence_efficiency}} |
-| 失败案例 / 局限 | {{error_analysis}} | {{evidence_failures}} |
-
-## 复现与可信度检查
-| 检查项 | 记录 |
-| --- | --- |
-| 数据划分是否清晰（train/val/test） | {{data_split}} |
-| 随机种子与运行次数 | {{seeds}} |
-| 超参数范围与选择策略 | {{hyperparameters}} |
-| 训练硬件 / 软件环境 | {{infra}} |
-| 统计显著性 / 方差报告 | {{significance_and_variance}} |
-| 代码可用性 | {{code_availability}} |
-| 数据可用性 | {{data_availability}} |
-| 复现风险点 | {{repro_risks}} |
-
-## 可引用材料
-> 用于 related work / introduction / method comparison，尽量附来源。
-
-| 用途 | 可引用内容 | 来源 |
-| --- | --- | --- |
-| 背景 | {{citable_background}} | {{citable_background_source}} |
-| Gap | {{citable_gap}} | {{citable_gap_source}} |
-| 方法比较 | {{citable_method_compare}} | {{citable_method_compare_source}} |
-| 实验证据 | {{citable_experiment}} | {{citable_experiment_source}} |
-| 局限 | {{citable_limitation}} | {{citable_limitation_source}} |
-
-## Zotero 批注与原文证据
-{{zotero_annotations_and_evidence}}
-
-## 个人核心文献库维护
-- 与我研究主线关系：{{research_relation}}
-- 是否纳入核心库：{{core_library_decision}}
-- 纳入/排除理由：{{core_library_reason}}
-- 复核计划：{{core_library_review_plan}}
-
-## 我的判断
-{{my_assessment}}
-
-## 待复核清单
-- [ ] 关键结果是否来自完整实验表格而非 abstract 概述？
-- [ ] Baseline 是否公平（同数据、同预算、同评测协议）？
-- [ ] 公式 / 算法步骤是否已回看原文并可复现？
-- [ ] 是否记录了至少一个失败案例或边界条件？
-- [ ] 我是否明确写出该论文与当前课题的直接关系？
-
-## 待复核问题
-{{open_questions}}
-
-## 后续行动
+**下一步行动：**
 {{next_actions}}
 
-## 元数据
+## 2. 关键图表（可选）
+{{framework_section}}
+
+## 3. 进阶细节（按需展开）
+{{advanced_details_block}}
+
+## 4. 证据区（按需展开）
+> [!quote]- 证据摘录 / 原文转述
+{{evidence_quote_block}}
+
+> [!note]- 我的批注 / Zotero 批注
+{{zotero_note_block}}
+
+## 5. 管理信息（可选）
+> [!info]- 标签与文献库信息
+> - 标准标签：{{canonical_tags_text}}
+> - 候选标签：{{candidate_tags_text}}
+> - 当前标签：{{tags_text}}
+> - 研究关系：{{research_relation}}
+
+## 6. 元数据（仅保留一份）
 | 项目 | 内容 |
 | --- | --- |
 | Authors | {{authors_text}} |
 | Year | {{year}} |
-| Venue | {{venue}} |
-| DOI | {{doi}} |
+| Venue | {{meta_venue}} |
+| DOI | {{meta_doi}} |
 | Zotero item key | {{zotero_item_key}} |
-| PDF key | {{pdf_key}} |
-| Zotero collections | {{zotero_collections_text}} |
-| Zotero tags | {{zotero_tags_text}} |
+| PDF key | {{meta_pdf_key}} |
+| Zotero collections | {{meta_zotero_collections}} |
+| Zotero tags | {{meta_zotero_tags}} |
+
+## 7. 待复核问题
+### 高优先级待复核
+{{high_priority_checks}}
+
+### 其他待复核问题
+{{open_questions}}

@@ -12,6 +12,90 @@ from urllib import error, request
 
 DEFAULT_VALUE = "needs-check"
 FIELD_BATCH_SIZE = 24
+PAPER_SUBTYPE_CHOICES = (
+    "survey",
+    "method",
+    "system",
+    "benchmark",
+    "dataset",
+    "empirical",
+    "theory",
+    "application",
+)
+PAPER_SUBTYPE_ALIASES = {
+    "review": "survey",
+    "literature-review": "survey",
+    "survey-paper": "survey",
+    "model": "method",
+    "framework": "method",
+    "pipeline": "method",
+    "architecture": "system",
+    "system-paper": "system",
+    "leaderboard": "benchmark",
+    "benchmarking": "benchmark",
+    "dataset-paper": "dataset",
+    "data-paper": "dataset",
+    "experiment": "empirical",
+    "experimental": "empirical",
+    "empirically": "empirical",
+    "analysis": "theory",
+    "analytical": "theory",
+    "proof": "theory",
+    "applied": "application",
+    "real-world": "application",
+}
+STRICT_FACT_FIELDS = {
+    "datasets",
+    "backbone",
+    "baselines",
+    "metrics",
+    "main_results_table_or_text",
+    "ablation_results",
+    "efficiency_cost",
+    "training_strategy",
+    "inference_pipeline",
+    "key_equations",
+    "equation_symbols",
+    "equation_role",
+    "equation_vs_baseline",
+    "most_important_figure_or_table",
+    "framework_source",
+    "framework_type",
+}
+NO_GUESS_PATTERNS = (
+    "基于当前信息推断",
+    "推断",
+    "可能",
+    "可能为",
+    "可能包括",
+    "猜测",
+    "估计",
+    "未明确",
+    "maybe",
+    "likely",
+    "possibly",
+    "could be",
+    "might be",
+    "may include",
+)
+NEEDS_CHECK_HINTS = {
+    "datasets": "needs-check",
+    "backbone": "needs-check",
+    "baselines": "needs-check",
+    "metrics": "needs-check",
+    "main_results_table_or_text": "needs-check",
+    "ablation_results": "needs-check",
+    "efficiency_cost": "needs-check",
+    "training_strategy": "needs-check",
+    "inference_pipeline": "needs-check",
+    "key_equations": "needs-check",
+    "equation_symbols": "needs-check",
+    "equation_role": "needs-check",
+    "equation_vs_baseline": "needs-check",
+    "most_important_figure_or_table": "needs-check",
+    "framework_source": "needs-check",
+    "framework_type": "needs-check",
+}
 
 KEY_FIELDS = [
     "one_sentence_summary",
@@ -36,6 +120,7 @@ ALL_MODULE_FIELDS = [
     "headline_results",
     "application_scenarios",
     "main_limitations",
+    "paper_subtype",
     "method_idea",
     "training_strategy",
     "inference_pipeline",
@@ -48,6 +133,9 @@ ALL_MODULE_FIELDS = [
     "baselines",
     "metrics",
     "main_results_table_or_text",
+    "result_reliability",
+    "most_important_figure_or_table",
+    "figure_table_takeaway",
     "ablation_results",
     "efficiency_cost",
     "error_analysis",
@@ -56,13 +144,16 @@ ALL_MODULE_FIELDS = [
     "citable_method_compare",
     "citable_experiment",
     "citable_limitation",
+    "worth_deep_reading",
+    "value_for_my_research",
+    "what_to_reuse",
+    "what_to_ignore",
     "core_library_review_plan",
     "my_assessment",
     "open_questions",
     "next_actions",
 ]
 
-# 这些字段通常来自外部系统或脚本抽取；如果已有有效值，默认不覆盖。
 NON_OVERWRITABLE_IF_PRESENT_FIELDS = {
     "zotero_item_key",
     "pdf_key",
@@ -71,7 +162,6 @@ NON_OVERWRITABLE_IF_PRESENT_FIELDS = {
     "framework_type",
 }
 
-# 对这些高风险字段，要求 AI 仅在“确定正确”时填写，否则必须写 needs-check。
 HIGH_RISK_FIELDS = {
     "zotero_item_key",
     "pdf_key",
@@ -86,7 +176,6 @@ HIGH_RISK_FIELDS = {
     "equation_vs_baseline",
 }
 
-# 这些字段通常需要逐页核对，同样按“确定才填，否则 needs-check”处理。
 MANUAL_REVIEW_FIELDS = {
     "data_split",
     "seeds",
@@ -100,7 +189,6 @@ MANUAL_REVIEW_FIELDS = {
 MANUAL_REVIEW_PREFIXES = ("evidence_",)
 MANUAL_REVIEW_SUFFIXES = ("_source",)
 
-# 这些字段偏“理解与总结”，允许基于上下文给出暂定草案，避免过度保守。
 LOW_RISK_SYNTHESIS_FIELDS = {
     "one_sentence_summary",
     "research_relation",
@@ -114,6 +202,7 @@ LOW_RISK_SYNTHESIS_FIELDS = {
     "headline_results",
     "application_scenarios",
     "main_limitations",
+    "paper_subtype",
     "core_modules",
     "pipeline_flow",
     "framework_explanation",
@@ -130,6 +219,9 @@ LOW_RISK_SYNTHESIS_FIELDS = {
     "baselines",
     "metrics",
     "main_results_table_or_text",
+    "result_reliability",
+    "most_important_figure_or_table",
+    "figure_table_takeaway",
     "ablation_results",
     "efficiency_cost",
     "error_analysis",
@@ -138,29 +230,100 @@ LOW_RISK_SYNTHESIS_FIELDS = {
     "citable_method_compare",
     "citable_experiment",
     "citable_limitation",
+    "worth_deep_reading",
+    "value_for_my_research",
+    "what_to_reuse",
+    "what_to_ignore",
     "core_library_review_plan",
     "my_assessment",
     "open_questions",
     "next_actions",
 }
 
+CHINESE_POLISH_FIELDS = {
+    "one_sentence_summary",
+    "why_read",
+    "core_problem",
+    "core_bottleneck",
+    "other_methods",
+    "method_one_liner",
+    "main_contributions",
+    "headline_results",
+    "main_limitations",
+    "method_idea",
+    "training_strategy",
+    "inference_pipeline",
+    "result_reliability",
+    "figure_table_takeaway",
+    "core_modules",
+    "pipeline_flow",
+    "task_input",
+    "task_output",
+    "assumptions",
+    "module_1",
+    "module_2",
+    "framework_explanation",
+    "main_results_table_or_text",
+    "value_for_my_research",
+    "what_to_reuse",
+    "what_to_ignore",
+    "research_relation",
+    "next_actions",
+    "open_questions",
+    "core_library_reason",
+}
+
+TAG_CANONICAL_MAP = {
+    "llm-agents": "llm-agent",
+    "llm-agentic": "llm-agent",
+    "chain-of-thoughts": "chain-of-thought",
+    "few-shot-prompting": "prompting",
+}
+
+TAG_CANDIDATE_HINTS = (
+    ("react", "react"),
+    ("chain-of-thought", "chain-of-thought"),
+    ("cot", "chain-of-thought"),
+    ("interactive decision", "interactive-decision-making"),
+    ("alfworld", "interactive-decision-making"),
+    ("webshop", "interactive-decision-making"),
+    ("hotpot", "knowledge-intensive-qa"),
+    ("fever", "knowledge-intensive-qa"),
+    ("memory trigger", "memory-trigger"),
+    ("memory weaver", "memory-weaver"),
+    ("latent token", "latent-token"),
+    ("reinforcement learning", "reinforcement-learning"),
+    ("self-evolving", "self-evolution"),
+    ("self evolution", "self-evolution"),
+    ("记忆触发", "memory-trigger"),
+    ("记忆编织", "memory-weaver"),
+    ("潜在 token", "latent-token"),
+    ("潜在记忆", "latent-memory"),
+    ("自进化", "self-evolution"),
+)
+
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="调用 OpenAI/DeepSeek 兼容 API 自动回填 JSON。")
-    parser.add_argument("input_json", help="输入 JSON 路径")
-    parser.add_argument("--output", default=None, help="输出 JSON 路径")
-    parser.add_argument("--overwrite", action="store_true", help="覆盖已有字段")
-    parser.add_argument("--fill-mode", choices=["key", "all"], default="key", help="回填模式")
-    parser.add_argument("--all-fields", action="store_true", help="回填输入 JSON 中的所有字段")
-    parser.add_argument("--pdf-path", default=None, help="可选：本地 PDF 路径，用于抽取正文片段增强 AI 回填")
-    parser.add_argument("--pdf-context-chars", type=int, default=12000, help="注入给 AI 的 PDF 文本片段最大字符数（默认 12000）")
+    parser = argparse.ArgumentParser(description="Fill paper-note JSON fields via OpenAI/DeepSeek-compatible API.")
+    parser.add_argument("input_json", help="Input JSON path")
+    parser.add_argument("--output", default=None, help="Output JSON path")
+    parser.add_argument("--overwrite", action="store_true", help="Overwrite existing values")
+    parser.add_argument("--fill-mode", choices=["key", "all"], default="key", help="Fill mode")
+    parser.add_argument("--all-fields", action="store_true", help="Fill all fields in the input JSON")
+    parser.add_argument("--pdf-path", default=None, help="Optional local PDF path for stronger context")
+    parser.add_argument(
+        "--pdf-context-chars",
+        type=int,
+        default=12000,
+        help="Max characters of PDF context to inject into the model",
+    )
     return parser.parse_args()
 
 
 def get_env(name, required=True, default=None):
     value = os.getenv(name, default)
     if required and (value is None or not str(value).strip()):
-        raise RuntimeError(f"缺少环境变量: {name}")
+        raise RuntimeError(f"Missing environment variable: {name}")
     return value
 
 
@@ -173,6 +336,90 @@ def value_is_empty(v):
     return False
 
 
+def normalize_paper_subtype(value, paper_type=DEFAULT_VALUE):
+    if value is None:
+        return DEFAULT_VALUE
+
+    raw = str(value).strip().lower()
+    if not raw or raw == DEFAULT_VALUE:
+        inferred_type = str(paper_type or "").strip().lower()
+        return "survey" if inferred_type == "survey" else DEFAULT_VALUE
+
+    # Normalize separators and capture potential english tokens.
+    compact = raw.replace("_", "-")
+    compact = re.sub(r"[\s/|,;，。]+", " ", compact)
+    tokens = re.findall(r"[a-z\-]+", compact)
+
+    for token in tokens:
+        if token in PAPER_SUBTYPE_CHOICES:
+            return token
+        if token in PAPER_SUBTYPE_ALIASES:
+            return PAPER_SUBTYPE_ALIASES[token]
+
+    for choice in PAPER_SUBTYPE_CHOICES:
+        if choice in compact:
+            return choice
+    for alias, mapped in PAPER_SUBTYPE_ALIASES.items():
+        if alias in compact:
+            return mapped
+
+    inferred_type = str(paper_type or "").strip().lower()
+    return "survey" if inferred_type == "survey" else DEFAULT_VALUE
+
+
+def contains_no_guess_pattern(value):
+    text = str(value or "").strip().lower()
+    if not text:
+        return False
+    return any(token in text for token in NO_GUESS_PATTERNS)
+
+
+def needs_check_fallback(field):
+    return NEEDS_CHECK_HINTS.get(field, DEFAULT_VALUE)
+
+
+def sanitize_generated_value(field, value, paper_type=DEFAULT_VALUE):
+    if isinstance(value, str):
+        value = value.strip() or DEFAULT_VALUE
+
+    if field == "paper_subtype":
+        return normalize_paper_subtype(value, paper_type)
+
+    if field in STRICT_FACT_FIELDS:
+        if value_is_empty(value):
+            return needs_check_fallback(field)
+        if contains_no_guess_pattern(value):
+            return needs_check_fallback(field)
+
+    if isinstance(value, str):
+        # Normalize odd punctuation tails from model output.
+        value = re.sub(r"[;；]+\s*[。.!?！？]?$", "", value.strip())
+        # Convert JSON-like object strings into readable plain text for human-facing fields.
+        if value.startswith("{") and value.endswith("}") and field in {
+            "module_1",
+            "module_2",
+            "equation_symbols",
+            "equation_role",
+            "core_modules",
+            "pipeline_flow",
+        }:
+            try:
+                obj = json.loads(value)
+            except Exception:
+                obj = None
+            if isinstance(obj, dict):
+                pairs = []
+                for k, v in obj.items():
+                    key = str(k).strip()
+                    val = str(v).strip()
+                    if key and val:
+                        pairs.append(f"{key}：{val}")
+                if pairs:
+                    value = "；".join(pairs)
+
+    return value
+
+
 def is_high_risk_field(field):
     if field in HIGH_RISK_FIELDS or field in MANUAL_REVIEW_FIELDS:
         return True
@@ -182,6 +429,153 @@ def is_high_risk_field(field):
         return True
     return False
 
+
+def normalize_tag_token(value):
+    text = str(value or "").strip().lower()
+    if not text or text == DEFAULT_VALUE:
+        return ""
+    text = text.replace("/", " ")
+    text = re.sub(r"[\s_]+", "-", text)
+    text = re.sub(r"[^a-z0-9\-]", "", text)
+    text = re.sub(r"-{2,}", "-", text).strip("-")
+    return TAG_CANONICAL_MAP.get(text, text)
+
+
+def normalize_tag_list(values):
+    if not isinstance(values, list):
+        return []
+    out = []
+    seen = set()
+    for item in values:
+        token = normalize_tag_token(item)
+        if not token or token in seen:
+            continue
+        seen.add(token)
+        out.append(token)
+    return out
+
+
+def dedupe_keep_order(values):
+    out = []
+    seen = set()
+    for item in values:
+        token = str(item or "").strip()
+        if not token or token in seen:
+            continue
+        seen.add(token)
+        out.append(token)
+    return out
+
+
+def build_candidate_tag_suggestions(data):
+    text = f"{data.get('title', '')} {data.get('abstract', '')}".lower()
+    suggestions = []
+    for key, token in TAG_CANDIDATE_HINTS:
+        if key in text:
+            suggestions.append(token)
+    return dedupe_keep_order(suggestions)
+
+
+def contains_cjk(text):
+    return bool(re.search(r"[\u4e00-\u9fff]", str(text or "")))
+
+
+def english_letter_ratio(text):
+    text = str(text or "")
+    letters = re.findall(r"[A-Za-z]", text)
+    visible = re.findall(r"[A-Za-z\u4e00-\u9fff]", text)
+    if not visible:
+        return 0.0
+    return len(letters) / len(visible)
+
+
+def needs_chinese_polish(field, value):
+    if field not in CHINESE_POLISH_FIELDS:
+        return False
+    if value_is_empty(value):
+        return False
+    text = str(value)
+    if text.strip().lower().startswith("needs-check"):
+        return False
+    if contains_cjk(text) and english_letter_ratio(text) < 0.55:
+        return False
+    return english_letter_ratio(text) >= 0.55
+
+
+def sanitize_tags_block(data):
+    tags = normalize_tag_list(data.get("tags"))
+    canonical = normalize_tag_list(data.get("canonical_tags"))
+    candidate = normalize_tag_list(data.get("candidate_tags"))
+
+    title_abstract = f"{data.get('title', '')} {data.get('abstract', '')}".lower()
+    heuristics = []
+    if "agent" in title_abstract:
+        heuristics.append("llm-agent")
+    if "prompt" in title_abstract:
+        heuristics.append("prompting")
+    if "tool" in title_abstract or "api" in title_abstract or "function call" in title_abstract:
+        heuristics.append("tool-use")
+    if ("react" in title_abstract) or ("thought" in title_abstract and "observation" in title_abstract):
+        heuristics.append("reasoning-acting")
+    if "memory" in title_abstract:
+        heuristics.append("agent-memory")
+    if "latent" in title_abstract:
+        heuristics.append("latent-memory")
+    if "generative memory" in title_abstract:
+        heuristics.append("generative-memory")
+    if "self-evolving" in title_abstract or "self evolution" in title_abstract or "self-evolution" in title_abstract:
+        heuristics.append("self-evolution")
+    if "llm-agent" not in tags and ("agent" in title_abstract):
+        heuristics.append("llm-agent")
+
+    for h in heuristics:
+        if h not in tags:
+            tags.append(h)
+
+    if not tags:
+        tags = ["method"]
+
+    if not canonical:
+        canonical = [t for t in tags if t != "method"][:5]
+    if not candidate:
+        candidate = canonical[:]
+
+    # Prefer adding a few retrieval-friendly candidate tags beyond canonical tags.
+    suggestions = build_candidate_tag_suggestions(data)
+    for token in suggestions:
+        if token not in candidate and len(candidate) < 8:
+            candidate.append(token)
+
+    # If candidate and canonical are identical, try to diversify candidate tags.
+    if set(candidate) == set(canonical):
+        for token in suggestions:
+            if token not in canonical and token not in candidate and len(candidate) < 8:
+                candidate.append(token)
+
+    tags = dedupe_keep_order(tags)
+    canonical = dedupe_keep_order(canonical)
+    candidate = dedupe_keep_order(candidate)
+
+    is_react_like = ("react" in title_abstract) or ("thought" in title_abstract and "observation" in title_abstract)
+    is_memory_like = "memory" in title_abstract
+    if is_memory_like and not is_react_like:
+        tags = [t for t in tags if t not in {"tool-use", "reasoning-acting"}]
+        canonical = [t for t in canonical if t not in {"tool-use", "reasoning-acting"}]
+        candidate = [t for t in candidate if t not in {"tool-use", "reasoning-acting"}]
+
+    data["tags"] = tags
+    data["canonical_tags"] = canonical
+    data["candidate_tags"] = candidate
+
+
+def postprocess_generated_data(data):
+    sanitize_tags_block(data)
+    data["paper_subtype"] = normalize_paper_subtype(data.get("paper_subtype"), data.get("paper_type", DEFAULT_VALUE))
+    # Avoid invalid wiki-image placeholders like `needs-check (...)`.
+    for key in ("framework_image_path", "framework_source", "framework_type"):
+        value = str(data.get(key, "")).strip()
+        if re.match(r"(?i)^needs[- ]?check", value):
+            data[key] = DEFAULT_VALUE
 
 def normalize_text(text):
     text = text.replace("\r", "\n")
@@ -322,12 +716,12 @@ def build_pdf_excerpt(raw_text, max_chars):
         "conclusion",
         "limitation",
         "appendix",
-        "摘要",
-        "引言",
-        "方法",
-        "实验",
-        "结果",
-        "结论",
+        "鎽樿",
+        "寮曡█",
+        "鏂规硶",
+        "瀹為獙",
+        "缁撴灉",
+        "缁撹",
     ]
     window = 1800
     for key in anchors:
@@ -361,10 +755,158 @@ def load_pdf_excerpt(pdf_path, pdf_context_chars):
         return None, ""
     path = Path(pdf_path).expanduser().resolve()
     if not path.exists():
-        raise RuntimeError(f"--pdf-path 指向的文件不存在: {path}")
+        raise RuntimeError(f"--pdf-path 鎸囧悜鐨勬枃浠朵笉瀛樺湪: {path}")
     raw_text = extract_text_from_pdf_path(path)
     excerpt = build_pdf_excerpt(raw_text, pdf_context_chars)
     return path, excerpt
+
+
+def sanitize_stem(name):
+    return re.sub(r"[^\w\-]+", "_", str(name or ""), flags=re.U).strip("_") or "paper"
+
+
+def parse_pdfimages_list(stdout_text):
+    rows = []
+    seen_sep = False
+    for raw_line in stdout_text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("-----"):
+            seen_sep = True
+            continue
+        if not seen_sep:
+            continue
+        parts = line.split()
+        if len(parts) < 6 or not parts[0].isdigit() or not parts[1].isdigit():
+            continue
+        page = int(parts[0])
+        num = int(parts[1])
+        width = int(parts[3]) if parts[3].isdigit() else 0
+        height = int(parts[4]) if parts[4].isdigit() else 0
+        rows.append({"page": page, "num": num, "width": width, "height": height, "area": width * height})
+    return rows
+
+
+def detect_figure_page_from_text(pdf_path, max_pages=8):
+    pdftotext_bin = shutil.which("pdftotext")
+    if not pdftotext_bin:
+        return None
+
+    best_page = None
+    best_score = -10**9
+    for page in range(1, max_pages + 1):
+        proc = subprocess.run(
+            [pdftotext_bin, "-f", str(page), "-l", str(page), str(pdf_path), "-"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+        )
+        if proc.returncode != 0:
+            continue
+        page_text = (proc.stdout or "").lower()
+        score = 0
+        if re.search(r"\bfigure\s*1\b|\bfig\.?\s*1\b", page_text):
+            score += 200
+        if re.search(r"\bfigure\b|\bfig\.\b", page_text):
+            score += 80
+        if "framework" in page_text or "architecture" in page_text:
+            score += 40
+        if "table 1" in page_text:
+            score += 20
+        score -= abs(page - 2) * 8
+        score -= max(0, len(page_text) - 2500) // 250
+        if page == 1:
+            score -= 30
+        if score > best_score:
+            best_score = score
+            best_page = page
+    if best_score < 0:
+        return 2 if max_pages >= 2 else 1
+    return best_page
+
+
+def render_page_png_fallback(pdf_path, out_dir, page):
+    pdftoppm_bin = shutil.which("pdftoppm")
+    if not pdftoppm_bin:
+        return None, "未找到 pdftoppm，无法使用页面渲染兜底。"
+
+    prefix = out_dir / "page_render"
+    proc = subprocess.run(
+        [pdftoppm_bin, "-f", str(page), "-l", str(page), "-png", str(pdf_path), str(prefix)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="ignore",
+    )
+    if proc.returncode != 0:
+        msg = proc.stderr.strip() or proc.stdout.strip() or "pdftoppm 渲染失败"
+        return None, msg
+
+    candidates = sorted(out_dir.glob("page_render-*.png"))
+    if not candidates:
+        return None, "页面渲染完成但未生成 PNG。"
+    return candidates[0], ""
+
+
+def auto_extract_framework_image(pdf_path, item_key, assets_root, max_pages=8):
+    out_dir = assets_root / item_key
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    pdfimages_bin = shutil.which("pdfimages")
+    if pdfimages_bin:
+        list_proc = subprocess.run(
+            [pdfimages_bin, "-f", "1", "-l", str(max_pages), "-list", str(pdf_path)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+        )
+        if list_proc.returncode == 0:
+            rows = parse_pdfimages_list(list_proc.stdout)
+            if rows:
+                rows.sort(key=lambda r: (r["area"] - r["page"] * 1000), reverse=True)
+                best = rows[0]
+                prefix = out_dir / "img"
+                extract_proc = subprocess.run(
+                    [pdfimages_bin, "-f", "1", "-l", str(max_pages), "-png", str(pdf_path), str(prefix)],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="ignore",
+                )
+                if extract_proc.returncode == 0:
+                    candidates = list(out_dir.glob("img-*.png"))
+                    if candidates:
+                        chosen = None
+                        for p in candidates:
+                            m = re.search(r"img-(\d+)\.png$", p.name)
+                            if m and int(m.group(1)) == best["num"]:
+                                chosen = p
+                                break
+                        if chosen is None:
+                            chosen = max(candidates, key=lambda p: p.stat().st_size)
+                        final_name = f"framework_p{best['page']:02d}_n{best['num']:03d}.png"
+                        final_path = out_dir / final_name
+                        if final_path.exists():
+                            final_path.unlink()
+                        chosen.replace(final_path)
+                        rel = (Path("assets") / item_key / final_name).as_posix()
+                        return rel, f"Auto extracted from PDF page {best['page']} image {best['num']}", False
+
+    # Fallback: vector-only PDFs often have no embedded raster image.
+    page = detect_figure_page_from_text(pdf_path, max_pages=max_pages) or (2 if max_pages >= 2 else 1)
+    rendered, err = render_page_png_fallback(pdf_path, out_dir, page)
+    if rendered:
+        final_name = f"framework_page_{page:02d}_render.png"
+        final_path = out_dir / final_name
+        if final_path.exists():
+            final_path.unlink()
+        rendered.replace(final_path)
+        rel = (Path("assets") / item_key / final_name).as_posix()
+        return rel, f"Rendered PDF page {page} as fallback (vector figure likely).", True
+    return None, f"图表抽取失败：{err or '未知错误'}", True
 
 
 def iter_field_batches(fields, batch_size=FIELD_BATCH_SIZE):
@@ -468,16 +1010,19 @@ def build_messages(data, fields_to_fill, fill_mode, pdf_excerpt="", pdf_path=Non
         "tags": data.get("tags", []),
         "zotero_annotations_and_evidence": data.get("zotero_annotations_and_evidence", DEFAULT_VALUE),
     }
-
     mode_rule = (
-        "普通字段可基于标题、摘要、批注和正文片段做合理推断，优先给出可用草案；仅在确实无依据时填写 needs-check。"
+        "Use title/abstract/annotations/pdf excerpts to produce concise and usable summaries. "
+        "If evidence is insufficient, return needs-check."
         if fill_mode == "all"
-        else "普通字段可做保守推断；信息不足时可填写 needs-check。"
+        else "Use conservative completion. If evidence is insufficient, return needs-check."
     )
     high_risk_fields = [field for field in fields_to_fill if is_high_risk_field(field)]
     low_risk_synthesis_fields = [
-        field for field in fields_to_fill if field in LOW_RISK_SYNTHESIS_FIELDS and field not in high_risk_fields
+        field
+        for field in fields_to_fill
+        if field in LOW_RISK_SYNTHESIS_FIELDS and field not in high_risk_fields and field not in STRICT_FACT_FIELDS
     ]
+    strict_fact_fields = [field for field in fields_to_fill if field in STRICT_FACT_FIELDS]
     experiment_focus_fields = [
         field
         for field in fields_to_fill
@@ -496,31 +1041,51 @@ def build_messages(data, fields_to_fill, fill_mode, pdf_excerpt="", pdf_path=Non
         (
             "以下字段属于低风险总结字段："
             + ", ".join(low_risk_synthesis_fields)
-            + "。除非完全没有线索，否则不要仅输出 needs-check；可使用“基于当前信息推断：...”的写法给出暂定结论。"
+            + "。尽量简洁，避免反复使用固定前缀措辞。"
         )
         if low_risk_synthesis_fields
-        else "普通字段若有任意线索，优先给出暂定结论。"
+        else ""
+    )
+    strict_fact_rule = (
+        (
+            "以下字段属于严格事实字段："
+            + ", ".join(strict_fact_fields)
+            + "。禁止编造具体 benchmark、backbone、算法名；若上下文未明确，必须写 needs-check，并给出简短回查提示。"
+        )
+        if strict_fact_fields
+        else ""
     )
     experiment_focus_rule = (
         (
-            "以下实验字段需要优先从正文片段提取具体名词和数字："
+            "以下实验字段仅允许填写上下文中明确出现的实体和数字："
             + ", ".join(experiment_focus_fields)
-            + "。若片段中出现任务名/数据集名/baseline名/结果数字，请直接填写，不要写 needs-check。"
+            + "。若未明确出现，必须写 needs-check。"
         )
         if experiment_focus_fields
         else ""
     )
+    paper_subtype_rule = (
+        " If paper_subtype is in required_fields, output exactly one lowercase label from: "
+        "survey, method, system, benchmark, dataset, empirical, theory, application. "
+        "Use empirical for experiment-focused papers."
+        if "paper_subtype" in fields_to_fill
+        else ""
+    )
 
     system = (
-        "你是科研论文笔记助手。输出必须是严格 json 对象，不要输出任何额外文本。"
-        "输出语言必须为中文。"
+        "You are a research paper note assistant. "
+        "Output must be a strict JSON object with no extra text. "
+        "The output language should be Chinese; keep technical English terms only when necessary and add concise Chinese context. "
+        "For human-facing body fields, avoid long English paragraphs. "
         + mode_rule
         + high_risk_rule
         + low_risk_rule
+        + strict_fact_rule
         + experiment_focus_rule
+        + paper_subtype_rule
     )
     user = {
-        "task": "回填论文笔记字段",
+        "task": "Fill paper-note fields",
         "required_fields": fields_to_fill,
         "current_values_for_required_fields": {field: data.get(field, DEFAULT_VALUE) for field in fields_to_fill},
         "paper_info": paper_info,
@@ -529,11 +1094,40 @@ def build_messages(data, fields_to_fill, fill_mode, pdf_excerpt="", pdf_path=Non
             "pdf_excerpt": pdf_excerpt if pdf_excerpt else DEFAULT_VALUE,
         },
         "format_rules": {
-            "open_questions": "使用 Markdown 项目符号列表，每行以 '- ' 开头",
-            "next_actions": "使用编号列表，如 '1. ...'",
-            "core_library_decision": "返回一个短词，如 candidate/include/exclude",
-            "required_fields_completeness": "必须覆盖 required_fields 中的每个字段",
-            "low_risk_placeholder_rule": "低风险总结字段如有线索，不要只写 needs-check",
+            "open_questions": "use Markdown bullet list, each line starts with '- '",
+            "next_actions": "use numbered list like '1. ...'",
+            "main_contributions": "prefer JSON array with 3-5 concise items; avoid one long paragraph",
+            "pipeline_flow": "prefer JSON array of ordered steps",
+            "module_1_module_2_style": "return plain text, do not return JSON object literals like {\"name\": ...}",
+            "core_library_decision": "return one short label: candidate/include/exclude",
+            "paper_subtype": "must be one of: survey/method/system/benchmark/dataset/empirical/theory/application",
+            "factual_fields_no_guess": "for factual fields, no guessing; if unclear, return needs-check with check hint",
+            "inferred_style": "keep inference concise; avoid repeated fixed prefix wording",
+            "evidence_quote_rule": "if not verbatim quote, keep as paraphrase and do not claim direct quotation",
+            "required_fields_completeness": "must cover every field in required_fields",
+            "low_risk_placeholder_rule": "for low-risk summary fields, avoid outputting only needs-check when evidence exists",
+        },
+    }
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": json.dumps(user, ensure_ascii=False)},
+    ]
+
+
+def build_polish_messages(field_values):
+    system = (
+        "You are a scientific note language normalizer. "
+        "Convert each field value to concise Chinese while preserving all facts, numbers, names, and uncertainty markers. "
+        "Do not add new claims. Return strict JSON only with the same keys."
+    )
+    user = {
+        "task": "Polish language to Chinese",
+        "fields": field_values,
+        "rules": {
+            "preserve_facts": "must keep all numbers, benchmark names, model names, and uncertainty",
+            "keep_terms": "keep necessary English technical terms and add concise Chinese context when helpful",
+            "json_style_cleanup": "if a field value is a JSON-like object string, rewrite it as readable Chinese plain text (not JSON literal)",
+            "no_new_information": True,
         },
     }
     return [
@@ -559,9 +1153,9 @@ def enrich_data(
     base_url = base_url or os.getenv("AI_BASE_URL") or default_base_url(provider)
     model = model or os.getenv("AI_MODEL") or default_model(provider)
     if not base_url:
-        raise RuntimeError("未知 provider，请设置 AI_BASE_URL")
+        raise RuntimeError("Unknown provider. Please set AI_BASE_URL.")
     if not model:
-        raise RuntimeError("未知 provider，请设置 AI_MODEL")
+        raise RuntimeError("Unknown provider. Please set AI_MODEL.")
 
     if all_fields:
         target_fields = list(data.keys())
@@ -579,6 +1173,33 @@ def enrich_data(
         return data, []
 
     resolved_pdf_path, pdf_excerpt = load_pdf_excerpt(pdf_path, pdf_context_chars)
+
+    # Global fallback: auto-extract key figure when PDF is available.
+    if resolved_pdf_path and value_is_empty(data.get("framework_image_path")):
+        repo_root = Path(__file__).resolve().parent.parent
+        assets_root = repo_root / "assets"
+        item_key = str(data.get("zotero_item_key") or "").strip()
+        if not item_key or item_key.lower() == DEFAULT_VALUE:
+            item_key = sanitize_stem(data.get("title") or resolved_pdf_path.stem)
+        rel_path, source_or_error, used_fallback = auto_extract_framework_image(
+            pdf_path=resolved_pdf_path,
+            item_key=item_key,
+            assets_root=assets_root,
+            max_pages=8,
+        )
+        if rel_path:
+            data["framework_image_path"] = rel_path
+            if value_is_empty(data.get("framework_source")):
+                data["framework_source"] = source_or_error
+            if value_is_empty(data.get("framework_type")):
+                data["framework_type"] = "figure / table / framework (needs-check)"
+            data["framework_needs_check"] = (
+                "已使用页面渲染兜底，建议人工确认是否为关键图表。"
+                if used_fallback
+                else "否"
+            )
+        elif value_is_empty(data.get("framework_needs_check")):
+            data["framework_needs_check"] = source_or_error
     for batch in iter_field_batches(fields_to_fill):
         messages = build_messages(
             data=data,
@@ -592,8 +1213,7 @@ def enrich_data(
 
         for field in batch:
             value = generated.get(field, DEFAULT_VALUE)
-            if isinstance(value, str):
-                value = value.strip() or DEFAULT_VALUE
+            value = sanitize_generated_value(field, value, data.get("paper_type", DEFAULT_VALUE))
             data[field] = value
 
     # Focused second pass for unresolved low-risk synthesis fields.
@@ -614,10 +1234,24 @@ def enrich_data(
         generated = parse_model_json(content)
         for field in unresolved_low_risk:
             value = generated.get(field, DEFAULT_VALUE)
-            if isinstance(value, str):
-                value = value.strip() or DEFAULT_VALUE
+            value = sanitize_generated_value(field, value, data.get("paper_type", DEFAULT_VALUE))
             data[field] = value
 
+    fields_to_polish = [
+        field
+        for field in set(fields_to_fill) | CHINESE_POLISH_FIELDS
+        if field in data and needs_chinese_polish(field, data.get(field))
+    ]
+    if fields_to_polish:
+        polish_payload = {field: data.get(field, DEFAULT_VALUE) for field in fields_to_polish}
+        messages = build_polish_messages(polish_payload)
+        content = post_chat(base_url, api_key, model, messages)
+        polished = parse_model_json(content)
+        for field in fields_to_polish:
+            if field in polished and not value_is_empty(polished[field]):
+                data[field] = polished[field]
+
+    postprocess_generated_data(data)
     return data, fields_to_fill
 
 
@@ -625,7 +1259,7 @@ def main():
     args = parse_args()
     input_path = Path(args.input_json).expanduser().resolve()
     if not input_path.exists():
-        raise RuntimeError(f"输入文件不存在: {input_path}")
+        raise RuntimeError(f"Input file does not exist: {input_path}")
 
     with input_path.open("r", encoding="utf-8-sig") as f:
         data = json.load(f)
@@ -639,19 +1273,20 @@ def main():
         pdf_context_chars=args.pdf_context_chars,
     )
     if not filled:
-        print("无需回填：目标字段已有内容。")
+        print("No fields need filling: target fields already have values.")
         return
 
     output_path = Path(args.output).expanduser().resolve() if args.output else input_path.with_name(input_path.stem + "_enriched.json")
     output_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"已生成 enriched JSON: {output_path}")
-    print("已回填字段: " + ", ".join(filled))
-    print(f"下一步可运行: python scripts/generate_note.py {output_path}")
+    print(f"Generated enriched JSON: {output_path}")
+    print("Filled fields: " + ", ".join(filled))
+    print(f"Next step: python scripts/generate_note.py {output_path}")
 
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print(f"失败: {e}")
+        print(f"Failed: {e}")
         sys.exit(1)
+
