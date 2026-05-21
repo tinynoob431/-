@@ -98,6 +98,9 @@ NEEDS_CHECK_HINTS = {
 }
 
 KEY_FIELDS = [
+    "tags",
+    "canonical_tags",
+    "candidate_tags",
     "one_sentence_summary",
     "why_read",
     "core_problem",
@@ -107,6 +110,9 @@ KEY_FIELDS = [
 ]
 
 ALL_MODULE_FIELDS = [
+    "tags",
+    "canonical_tags",
+    "candidate_tags",
     "one_sentence_summary",
     "research_relation",
     "core_library_decision",
@@ -150,6 +156,7 @@ ALL_MODULE_FIELDS = [
     "what_to_ignore",
     "core_library_review_plan",
     "my_assessment",
+    "high_priority_checks",
     "open_questions",
     "next_actions",
 ]
@@ -190,6 +197,9 @@ MANUAL_REVIEW_PREFIXES = ("evidence_",)
 MANUAL_REVIEW_SUFFIXES = ("_source",)
 
 LOW_RISK_SYNTHESIS_FIELDS = {
+    "tags",
+    "canonical_tags",
+    "candidate_tags",
     "one_sentence_summary",
     "research_relation",
     "core_library_reason",
@@ -236,6 +246,7 @@ LOW_RISK_SYNTHESIS_FIELDS = {
     "what_to_ignore",
     "core_library_review_plan",
     "my_assessment",
+    "high_priority_checks",
     "open_questions",
     "next_actions",
 }
@@ -268,6 +279,7 @@ CHINESE_POLISH_FIELDS = {
     "what_to_reuse",
     "what_to_ignore",
     "research_relation",
+    "high_priority_checks",
     "next_actions",
     "open_questions",
     "core_library_reason",
@@ -336,6 +348,21 @@ def value_is_empty(v):
     return False
 
 
+def is_garbled_text(value):
+    if not isinstance(value, str):
+        return False
+    text = value.strip()
+    if not text:
+        return False
+    # Common corruption signals from encoding mismatch / placeholder bursts.
+    if "???" in text:
+        return True
+    q_count = text.count("?")
+    if q_count >= 3 and (q_count / max(1, len(text))) > 0.08:
+        return True
+    return False
+
+
 def normalize_paper_subtype(value, paper_type=DEFAULT_VALUE):
     if value is None:
         return DEFAULT_VALUE
@@ -378,6 +405,22 @@ def needs_check_fallback(field):
     return NEEDS_CHECK_HINTS.get(field, DEFAULT_VALUE)
 
 
+def sanitize_key_equations_value(value):
+    src = str(value or "").strip()
+    if not src or src.lower() == DEFAULT_VALUE:
+        return needs_check_fallback("key_equations")
+    lines = [ln.strip() for ln in src.splitlines() if ln.strip()]
+    cleaned = []
+    for ln in lines:
+        cl = _clean_equation_line(ln)
+        if _looks_equation_line(cl):
+            cleaned.append(cl)
+    cleaned = dedupe_keep_order(cleaned)
+    if not cleaned:
+        return "needs-check: 公式文本抽取噪声较高，未识别到可靠公式行。"
+    return "\n".join(cleaned[:3])
+
+
 def sanitize_generated_value(field, value, paper_type=DEFAULT_VALUE):
     if isinstance(value, str):
         value = value.strip() or DEFAULT_VALUE
@@ -385,10 +428,15 @@ def sanitize_generated_value(field, value, paper_type=DEFAULT_VALUE):
     if field == "paper_subtype":
         return normalize_paper_subtype(value, paper_type)
 
+    if field == "key_equations":
+        return sanitize_key_equations_value(value)
+
     if field in STRICT_FACT_FIELDS:
         if value_is_empty(value):
             return needs_check_fallback(field)
         if contains_no_guess_pattern(value):
+            return needs_check_fallback(field)
+        if is_garbled_text(value):
             return needs_check_fallback(field)
 
     if isinstance(value, str):
@@ -468,7 +516,18 @@ def dedupe_keep_order(values):
 
 
 def build_candidate_tag_suggestions(data):
-    text = f"{data.get('title', '')} {data.get('abstract', '')}".lower()
+    text = " ".join(
+        str(data.get(key, ""))
+        for key in (
+            "title",
+            "abstract",
+            "one_sentence_summary",
+            "method_one_liner",
+            "core_modules",
+            "evidence_method",
+            "citable_method_compare",
+        )
+    ).lower()
     suggestions = []
     for key, token in TAG_CANDIDATE_HINTS:
         if key in text:
@@ -489,6 +548,44 @@ def english_letter_ratio(text):
     return len(letters) / len(visible)
 
 
+_MOJIBAKE_MARKERS = ("鎻", "鍙", "鐨", "鏈", "锛", "銆", "浠", "鏂", "瀛", "鍥", "璁")
+
+
+def _zh_readability_score(text):
+    common = "的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经十三之进着等模型方法实验结果数据训练推理工具"
+    return sum(text.count(ch) for ch in common)
+
+
+def maybe_fix_mojibake_text(text):
+    src = str(text or "")
+    if not src:
+        return src
+    if not any(m in src for m in _MOJIBAKE_MARKERS):
+        return src
+
+    best = src
+    best_score = _zh_readability_score(src)
+    for enc in ("gb18030", "gbk"):
+        try:
+            fixed = src.encode(enc, errors="strict").decode("utf-8", errors="strict")
+        except Exception:
+            continue
+        score = _zh_readability_score(fixed)
+        if score > best_score + 3:
+            best, best_score = fixed, score
+    return best
+
+
+def fix_mojibake_in_data(value):
+    if isinstance(value, str):
+        return maybe_fix_mojibake_text(value)
+    if isinstance(value, list):
+        return [fix_mojibake_in_data(v) for v in value]
+    if isinstance(value, dict):
+        return {k: fix_mojibake_in_data(v) for k, v in value.items()}
+    return value
+
+
 def needs_chinese_polish(field, value):
     if field not in CHINESE_POLISH_FIELDS:
         return False
@@ -506,62 +603,24 @@ def sanitize_tags_block(data):
     tags = normalize_tag_list(data.get("tags"))
     canonical = normalize_tag_list(data.get("canonical_tags"))
     candidate = normalize_tag_list(data.get("candidate_tags"))
-
-    title_abstract = f"{data.get('title', '')} {data.get('abstract', '')}".lower()
-    heuristics = []
-    if "agent" in title_abstract:
-        heuristics.append("llm-agent")
-    if "prompt" in title_abstract:
-        heuristics.append("prompting")
-    if "tool" in title_abstract or "api" in title_abstract or "function call" in title_abstract:
-        heuristics.append("tool-use")
-    if ("react" in title_abstract) or ("thought" in title_abstract and "observation" in title_abstract):
-        heuristics.append("reasoning-acting")
-    if "memory" in title_abstract:
-        heuristics.append("agent-memory")
-    if "latent" in title_abstract:
-        heuristics.append("latent-memory")
-    if "generative memory" in title_abstract:
-        heuristics.append("generative-memory")
-    if "self-evolving" in title_abstract or "self evolution" in title_abstract or "self-evolution" in title_abstract:
-        heuristics.append("self-evolution")
-    if "llm-agent" not in tags and ("agent" in title_abstract):
-        heuristics.append("llm-agent")
-
-    for h in heuristics:
-        if h not in tags:
-            tags.append(h)
-
     if not tags:
-        tags = ["method"]
-
+        tags = [DEFAULT_VALUE]
     if not canonical:
-        canonical = [t for t in tags if t != "method"][:5]
+        canonical = [DEFAULT_VALUE]
     if not candidate:
-        candidate = canonical[:]
+        candidate = []
 
-    # Prefer adding a few retrieval-friendly candidate tags beyond canonical tags.
+    # Candidate tags = AI output + deterministic suggestion hints.
     suggestions = build_candidate_tag_suggestions(data)
     for token in suggestions:
         if token not in candidate and len(candidate) < 8:
             candidate.append(token)
-
-    # If candidate and canonical are identical, try to diversify candidate tags.
-    if set(candidate) == set(canonical):
-        for token in suggestions:
-            if token not in canonical and token not in candidate and len(candidate) < 8:
-                candidate.append(token)
+    if not candidate:
+        candidate = [DEFAULT_VALUE]
 
     tags = dedupe_keep_order(tags)
     canonical = dedupe_keep_order(canonical)
     candidate = dedupe_keep_order(candidate)
-
-    is_react_like = ("react" in title_abstract) or ("thought" in title_abstract and "observation" in title_abstract)
-    is_memory_like = "memory" in title_abstract
-    if is_memory_like and not is_react_like:
-        tags = [t for t in tags if t not in {"tool-use", "reasoning-acting"}]
-        canonical = [t for t in canonical if t not in {"tool-use", "reasoning-acting"}]
-        candidate = [t for t in candidate if t not in {"tool-use", "reasoning-acting"}]
 
     data["tags"] = tags
     data["canonical_tags"] = canonical
@@ -569,6 +628,10 @@ def sanitize_tags_block(data):
 
 
 def postprocess_generated_data(data):
+    # Repair likely mojibake strings before downstream formatting.
+    for k in list(data.keys()):
+        data[k] = fix_mojibake_in_data(data.get(k))
+
     sanitize_tags_block(data)
     data["paper_subtype"] = normalize_paper_subtype(data.get("paper_subtype"), data.get("paper_type", DEFAULT_VALUE))
     # Avoid invalid wiki-image placeholders like `needs-check (...)`.
@@ -677,6 +740,137 @@ def extract_text_from_pdf_path(pdf_path):
     if len(text) >= 2000:
         return text
     return extract_text_from_pdf_bytes(pdf_path.read_bytes())
+
+
+def _clean_equation_line(line):
+    text = re.sub(r"\s+", " ", str(line or "")).strip(" .;，。")
+    text = re.sub(r"\s+\(\d+\)\s*$", "", text)  # trim trailing equation number marker
+    text = text.replace(":=", "=")
+    text = text.replace("Mt", "M_t").replace("mt", "m_t")
+    text = text.replace("Ht,<j", "H_{t,<j}")
+    # Trim verbose sentence prefixes and keep the formula tail when possible.
+    for rx in (
+        r"(e\([^)]*\)\s*=.+)$",
+        r"(m_t\s*=.+)$",
+        r"(M_t\s*=.+)$",
+        r"(z_\{t,j\}.+)$",
+        r"(p_j\s*=.+)$",
+        r"(L_i\s*=.+)$",
+    ):
+        m = re.search(rx, text, flags=re.I)
+        if m:
+            text = m.group(1).strip()
+            break
+    return text.strip()
+
+
+def _looks_equation_line(line):
+    text = re.sub(r"\s+", " ", str(line or "")).strip()
+    if len(text) < 8 or len(text) > 240:
+        return False
+    if not any(op in text for op in ("=", ":=", "~", "∼")):
+        return False
+    # Avoid citation/statement noise lines like "... (Zhang et al., 2025a) ... t = 0 ..."
+    if re.search(r"\bet al\.", text, flags=re.I):
+        return False
+    if re.search(r"\b(19|20)\d{2}[a-z]?\b", text) and not re.search(r"\(\d+\)\s*$", text):
+        return False
+    if re.search(r"[。.!?]$", text) and not re.search(r"\(\d+\)\s*$", text):
+        return False
+    math_signals = (
+        r"(?:\bM_t\b|\bm_t\b|\bH_{?t\b|Wweaver|Ttrigger|p_j|σ|\\pi|pi_|R\(|E\(|z_\{t,j\}|d_j|s_t|τ|"
+        r"e\([^)]*\)\s*=|L_i\s*=|<API>|</API>|->|→)"
+    )
+    has_signal = bool(re.search(math_signals, text, flags=re.I))
+    if not has_signal:
+        return False
+    # Filter natural-language lines that only incidentally contain "=".
+    long_words = re.findall(r"\b[A-Za-z]{3,}\b", text)
+    if len(long_words) >= 10 and len(re.findall(math_signals, text, flags=re.I)) < 2:
+        return False
+    return True
+
+
+def infer_equation_candidates(text):
+    src = normalize_text(text or "")
+    if not src:
+        return []
+
+    numbered = []
+    symbolic = []
+
+    # Line-wise extraction first: prefer explicit equation lines.
+    for raw_line in src.splitlines():
+        line = _clean_equation_line(raw_line)
+        if not _looks_equation_line(line):
+            continue
+        if re.search(r"\(\d+\)\s*$", raw_line.strip()):
+            numbered.append(line)
+        else:
+            symbolic.append(line)
+
+    # Around Equation(n) anchors, capture nearby formula lines.
+    for m in re.finditer(r"Equation\s*\(\d+\)", src, flags=re.I):
+        window = src[max(0, m.start() - 220): m.end() + 420]
+        for raw_line in window.splitlines():
+            line = _clean_equation_line(raw_line)
+            if _looks_equation_line(line):
+                numbered.append(line)
+
+    # Targeted regexes for MemGen-like notation as a backup.
+    regexes = [
+        r"M_t\s*=\s*Wweaver\s*\([^\n]{0,100}\)",
+        r"m_t\s*=\s*f_M\([^\n]{0,120}\)",
+        r"z_\{t,j\}\s*[~?]\s*[^\n]{0,120}",
+        r"max[^\n]{0,80}E\([^\n]{0,140}R\([^\n]{0,80}\)\)",
+        r"p_j\s*=\s*?\s*\([^\n]{0,120}\)",
+        r"e\s*\(\s*c\s*(?:,\s*r\s*)?\)\s*=\s*<API>[^\n]{0,180}</API>",
+        r"L_i\s*=\s*L_i\s*\([^\n]{0,120}\)",
+    ]
+    for rx in regexes:
+        for hit in re.finditer(rx, src, flags=re.I):
+            line = _clean_equation_line(hit.group(0))
+            if _looks_equation_line(line):
+                symbolic.append(line)
+
+    # Deduplicate while keeping order and prioritizing numbered equations.
+    out = []
+    seen = set()
+    for bucket in (numbered, symbolic):
+        for c in bucket:
+            key = c.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(c)
+    return out[:5]
+
+def try_fill_equation_fields_from_pdf(data, pdf_excerpt, resolved_pdf_path):
+    paper_type = str(data.get("paper_type") or "").strip().lower()
+    paper_subtype = str(data.get("paper_subtype") or "").strip().lower()
+    # Survey cards should not auto-inject noisy method-level formulas.
+    if paper_type == "survey" or paper_subtype == "survey":
+        return
+
+    if not value_is_empty(data.get("key_equations")) and str(data.get("key_equations")).strip().lower() != DEFAULT_VALUE:
+        return
+
+    candidates = infer_equation_candidates(pdf_excerpt)
+    if not candidates and resolved_pdf_path is not None:
+        try:
+            full_text = extract_text_from_pdf_path(resolved_pdf_path)
+        except Exception:
+            full_text = ""
+        candidates = infer_equation_candidates(full_text)
+
+    if not candidates:
+        return
+
+    data["key_equations"] = "\n".join(candidates[:3])
+    if value_is_empty(data.get("equation_symbols")):
+        data["equation_symbols"] = "needs-check: 符号定义未可靠抽取，需回查原文公式段。"
+    if value_is_empty(data.get("equation_role")):
+        data["equation_role"] = "needs-check: 公式作用未可靠抽取，需结合方法章节确认。"
 
 
 def build_pdf_excerpt(raw_text, max_chars):
@@ -1071,12 +1265,17 @@ def build_messages(data, fields_to_fill, fill_mode, pdf_excerpt="", pdf_path=Non
         if "paper_subtype" in fields_to_fill
         else ""
     )
-
     system = (
         "You are a research paper note assistant. "
         "Output must be a strict JSON object with no extra text. "
         "The output language should be Chinese; keep technical English terms only when necessary and add concise Chinese context. "
         "For human-facing body fields, avoid long English paragraphs. "
+        "When generating review lists, keep items paper-specific and do not copy terms from other papers. "
+        "Do not reuse fixed checklists from prior papers (e.g., trigger/weaver/ReAct+CoT) unless explicitly evidenced in this paper context. "
+        "For tags: tags and canonical_tags must be AI judgment from this paper evidence only; do not rely on template defaults. "
+        "candidate_tags can include AI judgment plus retrieval-friendly related terms if and only if semantically supported by the paper context. "
+        "Term style rule: if a term is crucial for method identity or evaluation comparability, you may use first-mention format English(Chinese); otherwise prefer direct Chinese expression. "
+        "If high_priority_checks is required, rank items from highest to lowest importance. "
         + mode_rule
         + high_risk_rule
         + low_risk_rule
@@ -1094,7 +1293,11 @@ def build_messages(data, fields_to_fill, fill_mode, pdf_excerpt="", pdf_path=Non
             "pdf_excerpt": pdf_excerpt if pdf_excerpt else DEFAULT_VALUE,
         },
         "format_rules": {
+            "tags": "return JSON array of short kebab-case tags based on this paper only (e.g., llm-agent, prompting); if uncertain return [\"needs-check\"]",
+            "canonical_tags": "return JSON array of stable core tags; if uncertain return [\"needs-check\"]",
+            "candidate_tags": "return JSON array of broader discoverability tags; may include related terms supported by evidence; if uncertain return [\"needs-check\"]",
             "open_questions": "use Markdown bullet list, each line starts with '- '",
+            "high_priority_checks": "use Markdown bullet list sorted from high to low importance; only include unresolved checks relevant to this paper",
             "next_actions": "use numbered list like '1. ...'",
             "main_contributions": "prefer JSON array with 3-5 concise items; avoid one long paragraph",
             "pipeline_flow": "prefer JSON array of ordered steps",
@@ -1106,6 +1309,7 @@ def build_messages(data, fields_to_fill, fill_mode, pdf_excerpt="", pdf_path=Non
             "evidence_quote_rule": "if not verbatim quote, keep as paraphrase and do not claim direct quotation",
             "required_fields_completeness": "must cover every field in required_fields",
             "low_risk_placeholder_rule": "for low-risk summary fields, avoid outputting only needs-check when evidence exists",
+            "term_style_rule": "for crucial terms use first-mention English(Chinese); for non-crucial terms prefer Chinese",
         },
     }
     return [
@@ -1118,7 +1322,8 @@ def build_polish_messages(field_values):
     system = (
         "You are a scientific note language normalizer. "
         "Convert each field value to concise Chinese while preserving all facts, numbers, names, and uncertainty markers. "
-        "Do not add new claims. Return strict JSON only with the same keys."
+        "Do not add new claims. Return strict JSON only with the same keys. "
+        "For crucial terms you may keep first-mention English(Chinese); non-crucial terms prefer Chinese."
     )
     user = {
         "task": "Polish language to Chinese",
@@ -1250,6 +1455,9 @@ def enrich_data(
         for field in fields_to_polish:
             if field in polished and not value_is_empty(polished[field]):
                 data[field] = polished[field]
+
+    # Deterministic fallback for obvious equation snippets when model returns needs-check.
+    try_fill_equation_fields_from_pdf(data, pdf_excerpt, resolved_pdf_path)
 
     postprocess_generated_data(data)
     return data, fields_to_fill

@@ -112,6 +112,8 @@ def is_placeholder(value):
     text = str(value).strip().lower()
     if not text:
         return True
+    if re.fullmatch(r"[\?\uff1f\.\u3002,，;；:：!！\s]+", text):
+        return True
     text = re.sub(r"\s+", " ", text)
     if text in PLACEHOLDER_TOKENS:
         return True
@@ -210,6 +212,10 @@ def to_body_text(value, field_name=""):
         return "是"
     if re.match(r"^(no|false)$", text, flags=re.I):
         return "否"
+    if field_name == "worth_deep_reading" and re.match(r"^(yes|true)\b", text, flags=re.I):
+        return "是"
+    if field_name == "worth_deep_reading" and re.match(r"^(no|false)\b", text, flags=re.I):
+        return "否"
     if field_name == "worth_deep_reading" and re.match(r"^(maybe|可能|待定)$", text, flags=re.I):
         return "是，但需先补实验设置与训练细节。"
 
@@ -266,6 +272,23 @@ def to_body_text(value, field_name=""):
         if not text.startswith("待核查：") and not text.startswith("推断："):
             text = f"推断：{text}"
     text = re.sub(r"\s{2,}", " ", text).strip()
+
+    # Keep user-facing prose readable in Chinese when models output long English sentences.
+    if field_name in {
+        "worth_deep_reading",
+        "value_for_my_research",
+        "what_to_reuse",
+        "what_to_ignore",
+        "core_library_reason",
+        "research_relation",
+    }:
+        letters = re.findall(r"[A-Za-z]", text)
+        visible = re.findall(r"[A-Za-z\u4e00-\u9fff]", text)
+        ratio = (len(letters) / len(visible)) if visible else 0.0
+        if ratio > 0.65:
+            if field_name == "worth_deep_reading":
+                return "是，但需回查原文细节后再定稿。"
+            return "待核查：当前文本英文占比过高，需回查原文并整理为中文表述。"
     return text
 
 
@@ -337,101 +360,16 @@ def normalize_punctuation_tail(text):
 
 def annotate_key_terms(text):
     out = str(text or "")
-    replacements = [
-        (r"\bMemory Trigger\b(?!（)", "Memory Trigger（记忆触发器）"),
-        (r"\bMemory Weaver\b(?!（)", "Memory Weaver（记忆编织器）"),
-        (r"记忆\s*Trigger", "Memory Trigger（记忆触发器）"),
-        (r"记忆\s*Weaver", "Memory Weaver（记忆编织器）"),
-        (r"潜在\s*token\s*Integration", "Latent Token Integration（潜在 token 集成）"),
-        (r"\blatent token(s)?\b(?!（)", "latent token（潜在 token）"),
-        (r"\bThought\b(?!（)", "Thought（思考）"),
-        (r"\bAction\b(?!（)", "Action（行动）"),
-        (r"\bObservation\b(?!（)", "Observation（观察）"),
-        (r"\bChain-of-thought\b(?!（)", "Chain-of-thought（思维链）"),
-    ]
-    for pattern, repl in replacements:
-        out = re.sub(pattern, repl, out, flags=re.I)
-    out = out.replace("Memory Trigger（记忆触发器）（记忆触发器）", "Memory Trigger（记忆触发器）")
-    out = out.replace("Memory Weaver（记忆编织器）（记忆编织器）", "Memory Weaver（记忆编织器）")
-    out = out.replace("latent token（潜在 token）（潜在 token）", "latent token（潜在 token）")
-    out = out.replace("Latent Token Integration（潜在 token 集成）（潜在 token 集成）", "Latent Token Integration（潜在 token 集成）")
+    # Keep post-cleanup only; do not hardcode a fixed term glossary here.
+    out = re.sub(r"（([^）]+)）\s*（\1）", r"（\1）", out)
     return out
 
 
 def rough_localize_english_text(text):
     src = str(text or "")
-    if re.search(r"[\u4e00-\u9fff]", src):
-        letters = re.findall(r"[A-Za-z]", src)
-        visible = re.findall(r"[A-Za-z\u4e00-\u9fff]", src)
-        ratio = (len(letters) / len(visible)) if visible else 0.0
-        if ratio < 0.55:
-            return src
-    if not re.search(r"[A-Za-z]", src):
-        return src
-
-    phrase_pairs = [
-        (
-            r"memory trigger:?\s*decides token-level memory invocation based on agent reasoning state\.?",
-            "Memory Trigger（记忆触发器）：根据智能体当前推理状态，在 token 级判断是否调用记忆。",
-        ),
-        (
-            r"memory weaver:?\s*generates latent token sequence from current state as machine-native memory\.?",
-            "Memory Weaver（记忆编织器）：根据当前状态生成 latent token（潜在 token）序列，作为机器原生记忆。",
-        ),
-        (
-            r"latent token integration:?\s*inserts latent memory tokens into the agent'?s reasoning stream\.?",
-            "Latent Token Integration（潜在 token 集成）：将生成的记忆 token 插入推理流。",
-        ),
-        (
-            r"agent processes task query and current observation, producing reasoning tokens\.?",
-            "智能体处理任务输入与当前观察，生成推理 token。",
-        ),
-        (
-            r"memory trigger monitors the reasoning state; if memory is needed, it signals invocation\.?",
-            "记忆触发器监测推理状态；若需要记忆，则发出调用信号。",
-        ),
-        (
-            r"memory weaver receives the current state as stimulus and autoregressively generates a sequence of latent memory tokens\.?",
-            "记忆编织器接收当前状态作为刺激，并自回归生成一段潜在记忆 token 序列。",
-        ),
-        (
-            r"generated latent tokens are inserted into the agent'?s context, interleaving with text tokens\.?",
-            "生成的潜在 token 被插入智能体上下文，并与文本 token 交织。",
-        ),
-        (
-            r"agent continues reasoning enhanced by the latent memory, possibly triggering memory again later\.?",
-            "智能体在潜在记忆增强下继续推理，并可在后续再次触发记忆。",
-        ),
-        (
-            r"environment interaction\s*/\s*reward used for rl-based training of the memory components\.?",
-            "训练阶段通过环境交互与奖励信号优化记忆组件。",
-        ),
-        (
-            r"agent'?s current state \(including observation, previous actions, and reasoning context\) and history of past experiences\.?",
-            "智能体当前状态（包括观察、历史动作与推理上下文）及历史经验。",
-        ),
-        (
-            r"agent reasoning and action, augmented with latent memory tokens interleaved in the output text; optionally, improved task performance and emergent memory structures\.?",
-            "带有潜在记忆 token 交织增强的智能体推理与行动输出，以及对应的任务性能提升与涌现记忆结构。",
-        ),
-        (
-            r"the llm can incorporate latent token sequences into its generation without explicit text interpretation; agent tasks have a reward signal for rl-based optimization; memory invocation can be learned in a token-level decision process; the distribution of tasks provides a transferable memory signal that generalizes across domains\.?",
-            "假设模型可在不显式解释文本的情况下吸收潜在 token 序列；任务环境提供奖励信号；记忆调用可通过 token 级决策学习；任务分布中的记忆信号可跨领域迁移。",
-        ),
-        (
-            r"a lightweight module \(possibly a trained header or adaptive mechanism\) that analyzes the agent'?s current reasoning state and determines whether to invoke memory generation\. it triggers the memory weaver at optimal moments during token generation\.?",
-            "一个轻量模块，分析智能体当前推理状态并判断是否调用记忆生成，在合适的 token 时机触发记忆编织器。",
-        ),
-        (
-            r"a generative model \(based on the same llm or an adapter\) that takes the agent'?s state as input and autoregressively produces a sequence of latent tokens encoding relevant past experiences\. these tokens are then injected into the agent'?s context\.?",
-            "一个生成模块（可基于同一 LLM 或适配器），以智能体状态为输入自回归生成潜在 token 序列，编码相关历史经验并注入上下文。",
-        ),
-    ]
-    out = src
-    for pat, repl in phrase_pairs:
-        out = re.sub(pat, repl, out, flags=re.I)
-    out = out.replace(" .", ".").replace(" ,", ",")
-    return out
+    # Keep localization lightweight and model-driven:
+    # avoid embedding paper-specific canned rewrites in code.
+    return src.replace(" .", ".").replace(" ,", ",")
 
 
 def try_parse_json_object(text):
@@ -500,17 +438,6 @@ def discover_framework_image_path(data):
 
 def summarize_framework_explanation(text, title_hint=""):
     body = to_body_text(text, "framework_explanation")
-    lower = body.lower()
-
-    has_trigger = ("memory trigger" in lower) or ("记忆触发" in body) or ("触发器" in body)
-    has_weaver = ("memory weaver" in lower) or ("记忆编织" in body) or ("编织器" in body)
-    if has_trigger and has_weaver:
-        return (
-            "MemGen 由 Memory Trigger（记忆触发器）和 "
-            "Memory Weaver（记忆编织器）组成。"
-        )
-    if "thought" in lower and "action" in lower and "observation" in lower:
-        return "核心流程为 Thought（思考）→ Action（行动）→ Observation（观察）循环。"
     if len(body) > 180:
         parts = split_to_points(body)
         if parts:
@@ -548,27 +475,22 @@ def build_framework_section(data):
         source = "Auto resolved from assets folder."
     lines.append(f"- 图/表来源：{source}")
     lines.append(f"- 图/表类型：{fig_type}")
-    title_abstract = f"{normalize_value(data.get('title'))} {normalize_value(data.get('abstract'))}".lower()
-    is_react_like = ("react" in title_abstract) or (
-        "thought" in title_abstract and "action" in title_abstract and "observation" in title_abstract
-    )
-    is_memgen_like = any(
-        token in title_abstract
-        for token in ("memgen", "memory trigger", "memory weaver", "latent memory", "agent memory")
-    )
+    structure_line = explanation if not is_placeholder(explanation) else "待核查：需结合图注确认图表结构。"
 
-    if is_react_like:
-        structure_line = "Figure 1 对比了 Standard、CoT、Act-only 和 ReAct 四种提示方式。"
-        process_line = "ReAct 在同一轨迹中交替生成 Thought（思考）、Action（行动），并接收 Observation（观察）反馈。"
-        meaning_line = "展示了推理与行动协同如何减少幻觉、增强规划能力并提升可解释性。"
-    elif is_memgen_like:
-        structure_line = "由 Memory Trigger（记忆触发器）和 Memory Weaver（记忆编织器）组成。"
-        process_line = "触发器判断是否调用记忆，编织器生成 latent token（潜在 token），并插入推理流。"
-        meaning_line = "将记忆从外部检索式附加转为推理过程中的 token 级内生交织。"
+    pipeline_text = to_body_text(data.get("pipeline_flow"), "pipeline_flow")
+    if not is_placeholder(pipeline_text):
+        process_points = split_to_points(pipeline_text, "pipeline_flow")
+        process_points = [pt for pt in process_points if pt and not is_placeholder(pt)]
+        if process_points:
+            process_line = "；".join(process_points[:3])
+            process_line = ensure_sentence_punctuation(process_line)
+        else:
+            process_line = "待核查：需结合正文图注补全流程要点。"
     else:
-        structure_line = explanation
         process_line = "待核查：需结合正文图注补全流程要点。"
-        meaning_line = "待核查：需结合正文结论补全图表意义。"
+
+    takeaway = to_body_text(data.get("figure_table_takeaway"), "figure_table_takeaway")
+    meaning_line = takeaway if not is_placeholder(takeaway) else "待核查：需结合正文结论补全图表意义。"
 
     lines.append("- 图/表说明：")
     lines.append(f"  - 结构：{structure_line}")
@@ -579,13 +501,51 @@ def build_framework_section(data):
 
 
 def build_equation_block(data):
-    equations = normalize_value(data.get("key_equations"))
-    if is_placeholder(equations) or "无关键方程式" in equations or equations.strip().lower() in {"无", "none"}:
+    hdr = "\u516c\u5f0f\u4e0e\u7b97\u6cd5\u7ec6\u8282"
+    kf = "\u5173\u952e\u5f62\u5f0f"
+    sym = "\u7b26\u53f7\u8bf4\u660e"
+    role_label = "\u516c\u5f0f\u4f5c\u7528"
+    diff_label = "\u4e0e baseline \u5dee\u5f02"
+    review_hint = "\u5f85\u6838\u67e5\uff1a\u9700\u56de\u67e5\u539f\u6587\u3002"
+
+    paper_type = normalize_value(data.get("paper_type")).strip().lower()
+    paper_subtype = normalize_value(data.get("paper_subtype")).strip().lower()
+    if paper_type == "survey" or paper_subtype == "survey":
         return (
-            "> [!info]- 公式与算法细节\n"
-            "> - 关键形式：Thought（思考）→ Action（行动）→ Observation（观察）循环。\n"
-            "> - 该论文主要是 prompting paradigm，不依赖新的数学公式。\n"
-            "> - 与 baseline 差异：重点在轨迹组织方式，而非新增训练目标函数。"
+            f"> [!info]- {hdr}\n"
+            f"> - {kf}: \u5f85\u6838\u67e5\uff1a\u7efc\u8ff0\u8bba\u6587\u901a\u5e38\u4e0d\u63d0\u4f9b\u7edf\u4e00\u8bad\u7ec3\u76ee\u6807\u6216\u6838\u5fc3\u516c\u5f0f\uff0c\u9700\u6309\u88ab\u7efc\u8ff0\u65b9\u6cd5\u56de\u67e5\u539f\u6587\u3002\n"
+            "> - \u8be5\u8bba\u6587\u4e3b\u8981\u63d0\u4f9b\u5206\u7c7b\u4e0e\u65b9\u6cd5\u68b3\u7406\uff0c\u975e\u5355\u4e00\u7b97\u6cd5\u63a8\u5bfc\u3002\n"
+            f"> - {diff_label}: {review_hint}"
+        )
+
+    equations = normalize_value(data.get("key_equations"))
+    if is_placeholder(equations) or equations.strip().lower() in {"none", "?"}:
+        title_blob = normalize_value(data.get("title")).lower()
+        context_blob = " ".join(
+            [
+                normalize_value(data.get("method_one_liner")),
+                normalize_value(data.get("method_idea")),
+                normalize_value(data.get("inference_pipeline")),
+                normalize_value(data.get("pipeline_flow")),
+                normalize_value(data.get("evidence_method")),
+            ]
+        ).lower()
+        merged_blob = f"{title_blob} {context_blob}"
+        react_like = ("react" in merged_blob) or (
+            "thought" in merged_blob and "action" in merged_blob and ("observation" in merged_blob or "obs" in merged_blob)
+        )
+        if react_like:
+            return (
+                f"> [!info]- {hdr}\n"
+                f"> - {kf}: Thought(\u601d\u8003) -> Action(\u884c\u52a8) -> Observation(\u89c2\u5bdf) \u5faa\u73af\u3002\n"
+                "> - \u8be5\u8bba\u6587\u4e3b\u8981\u662f prompting paradigm\uff0c\u4e0d\u4f9d\u8d56\u65b0\u7684\u6570\u5b66\u516c\u5f0f\u3002\n"
+                f"> - {diff_label}: \u91cd\u70b9\u5728\u8f68\u8ff9\u7ec4\u7ec7\u65b9\u5f0f\uff0c\u800c\u975e\u65b0\u589e\u8bad\u7ec3\u76ee\u6807\u51fd\u6570\u3002"
+            )
+        return (
+            f"> [!info]- {hdr}\n"
+            f"> - {kf}: \u5f85\u6838\u67e5\uff1a\u5f53\u524d\u6458\u5f55\u672a\u63d0\u4f9b\u7edf\u4e00\u6570\u5b66\u516c\u5f0f\u6216\u6807\u51c6\u7b97\u6cd5\u5f0f\uff0c\u9700\u56de\u67e5\u65b9\u6cd5 / \u9644\u5f55\u3002\n"
+            "> - \u8be5\u8bba\u6587\u5f53\u524d\u66f4\u504f\u6846\u67b6 / \u6d41\u7a0b\u63cf\u8ff0\uff0c\u516c\u5f0f\u7ec6\u8282\u9700\u56de\u67e5\u539f\u6587\u3002\n"
+            f"> - {diff_label}: {review_hint}"
         )
 
     symbol_raw = normalize_value(data.get("equation_symbols"))
@@ -594,89 +554,88 @@ def build_equation_block(data):
     role = to_body_text(role_raw, "equation_role")
     vs_baseline = to_body_text(data.get("equation_vs_baseline"), "equation_vs_baseline")
 
+    def _is_formula_like(line):
+        t = str(line or "").strip()
+        if len(t) < 6 or len(t) > 220:
+            return False
+        if re.search(r"\bet al\.", t, flags=re.I):
+            return False
+        if not any(op in t for op in ("=", ":=", "~", r"\sim")):
+            return False
+        return bool(
+            re.search(
+                r"(M_t|m_t|H_\{t,<j\}|Wweaver|Ttrigger|p_j|\\pi|pi_|R\(|E\(|z_\{t,j\}|s_t|\\max|f_M)",
+                t,
+                flags=re.I,
+            )
+        )
+
     def _as_latex_items(text):
-        src = str(text or "").strip()
-        if not src:
-            return []
-        # Special pattern: three equations in one line (common in MemGen-like outputs).
-        if all(token in src for token in ["z_{t,j}", "max", "m_t ="]):
-            return [
-                r"z_{t,j} \sim \pi_\theta(\cdot \mid s_t, z_{t,<j})",
-                r"\max_{\theta,M} \mathbb{E}_{x \sim D,\, \tau \sim \pi_{\theta,M}}[R(\tau)]",
-                r"m_t = f_M(s_t, H, m_{<t})",
-            ]
-        lines = [ln.strip() for ln in src.splitlines() if ln.strip()]
-        if len(lines) == 1 and "," in lines[0]:
-            parts = [p.strip() for p in re.split(r"\s*,\s*(?=(?:max|m_t|z_\{t,j\}))", lines[0]) if p.strip()]
-            if len(parts) >= 2:
-                lines = parts
+        if isinstance(text, list):
+            lines = [str(x).strip() for x in text if str(x).strip()]
+        else:
+            src = str(text or "").strip()
+            lines = [ln.strip() for ln in src.splitlines() if ln.strip()]
+            if len(lines) == 1 and ("," in lines[0] or ";" in lines[0]):
+                parts = [
+                    p.strip()
+                    for p in re.split(r"\s*[;,]\s*(?=(?:max|m_t|M_t|z_\{t,j\}|p_j|f_M))", lines[0], flags=re.I)
+                    if p.strip()
+                ]
+                if len(parts) >= 2:
+                    lines = parts
+
         normed = []
         for line in lines:
+            line = line.replace(":=", "=")
             line = line.replace("~", r" \sim ")
-            line = line.replace("πθ", r"\pi_\theta").replace("π_θ", r"\pi_\theta")
+            line = line.replace("\u03c0\u03b8", r"\pi_\theta").replace("\u03c0_\u03b8", r"\pi_\theta")
+            line = line.replace("Mt", "M_t").replace("mt", "m_t").replace("Ht,<j", "H_{t,<j}")
             line = re.sub(r"\bst\b", r"s_t", line)
-            normed.append(re.sub(r"\s{2,}", " ", line).strip())
+            line = re.sub(r"\s+", " ", line).strip().strip(".?")
+            if _is_formula_like(line):
+                normed.append(line)
         return normed
 
-    def _dict_to_bullets(text):
+    def _dict_to_bullets(text, field_name):
         src = str(text or "").strip()
         obj = try_parse_json_object(src)
-        objects = []
         if isinstance(obj, dict):
-            objects = [obj]
-        elif src.startswith("{") and "},{" in src.replace(" ", ""):
-            try:
-                parsed = json.loads(f"[{src}]")
-                if isinstance(parsed, list):
-                    objects = [x for x in parsed if isinstance(x, dict)]
-            except Exception:
-                objects = []
-
-        if objects:
             items = []
-            for idx, one in enumerate(objects, 1):
-                if "symbols" in one:
-                    label = one.get("equation_index", idx)
-                    line = f"方程{label}：{one.get('symbols')}"
-                elif "role" in one:
-                    label = one.get("equation_index", idx)
-                    line = f"方程{label}：{one.get('role')}"
-                elif len(one) == 1:
-                    k, v = next(iter(one.items()))
-                    line = f"{k}：{v}"
-                else:
-                    line = "；".join(f"{k}：{v}" for k, v in one.items())
-                line = rough_localize_english_text(line)
-                line = annotate_key_terms(line)
-                items.append(line)
-            return items or ["待核查：需回查原文。"]
-
+            for k, v in obj.items():
+                key = str(k).strip()
+                val = str(v).strip()
+                if key and val:
+                    items.append(f"{key}: {val}")
+            return items or [review_hint]
         if is_placeholder(src):
-            return ["待核查：需回查原文。"]
-        return [to_body_text(src, "equation_symbols")]
+            return [review_hint]
+        return [to_body_text(src, field_name)]
 
-    latex_items = _as_latex_items(equations)
+    latex_items = _as_latex_items(data.get("key_equations"))
     eq_lines = []
-    for expr in latex_items:
-        eq_lines.append("> $$")
-        eq_lines.append(f"> {expr}")
-        eq_lines.append("> $$")
-        eq_lines.append(">")
+    if latex_items:
+        for expr in latex_items:
+            eq_lines.append("> $$")
+            eq_lines.append(f"> {expr}")
+            eq_lines.append("> $$")
+            eq_lines.append(">")
+    else:
+        eq_lines.append(f"> - {kf}: \u5f85\u6838\u67e5\uff1a\u68c0\u6d4b\u5230\u7591\u4f3c\u516c\u5f0f\u7247\u6bb5\uff0c\u4f46\u5f53\u524d\u62bd\u53d6\u566a\u58f0\u8f83\u9ad8\uff0c\u9700\u56de\u67e5\u539f\u6587\u516c\u5f0f\u533a\u3002")
 
-    symbol_items = _dict_to_bullets(symbol_raw if not is_placeholder(symbol_raw) else symbol)
-    role_items = _dict_to_bullets(role_raw if not is_placeholder(role_raw) else role)
+    symbol_items = _dict_to_bullets(symbol_raw if not is_placeholder(symbol_raw) else symbol, "equation_symbols")
+    role_items = _dict_to_bullets(role_raw if not is_placeholder(role_raw) else role, "equation_role")
 
-    head = ["> [!info]- 公式与算法细节"]
+    head = [f"> [!info]- {hdr}"]
     head.extend(eq_lines)
-    head.append("> - 符号说明：")
+    head.append(f"> - {sym}:")
     for item in symbol_items:
         head.append(f">   - {item}")
-    head.append("> - 公式作用：")
+    head.append(f"> - {role_label}:")
     for item in role_items:
         head.append(f">   - {item}")
-    head.append(f"> - 与 baseline 差异：{vs_baseline}")
+    head.append(f"> - {diff_label}: {vs_baseline}")
     return "\n".join(head)
-
 
 def build_advanced_details_block(data):
     core_lines = [
@@ -856,78 +815,24 @@ def normalize_tag_token(value):
 
 
 def build_tags(data):
-    merged = []
-    paper_type = data.get("paper_type")
-    if paper_type:
-        merged.append(paper_type)
-    for key in ("tags", "canonical_tags"):
-        values = data.get(key)
-        if isinstance(values, list):
-            merged.extend(values)
-
-    title_abstract = f"{normalize_value(data.get('title'))} {normalize_value(data.get('abstract'))}".lower()
-    heuristic_tags = []
-    if "agent" in title_abstract:
-        heuristic_tags.append("llm-agent")
-    if "prompt" in title_abstract:
-        heuristic_tags.append("prompting")
-    if "tool" in title_abstract or "api" in title_abstract or "function call" in title_abstract:
-        heuristic_tags.append("tool-use")
-    if ("react" in title_abstract) or ("thought" in title_abstract and "observation" in title_abstract):
-        heuristic_tags.append("reasoning-acting")
-    if "memory" in title_abstract:
-        heuristic_tags.append("agent-memory")
-    if "latent" in title_abstract:
-        heuristic_tags.append("latent-memory")
-    if "generative memory" in title_abstract:
-        heuristic_tags.append("generative-memory")
-    if "self-evolving" in title_abstract or "self evolution" in title_abstract or "self-evolution" in title_abstract:
-        heuristic_tags.append("self-evolution")
-        heuristic_tags.append("self-evolving-agents")
-    if "llm-agent" not in heuristic_tags and (
-        ("agent" in title_abstract)
-        or ("prompt" in title_abstract and "action" in title_abstract)
-        or ("reason" in title_abstract and "act" in title_abstract)
-    ):
-        heuristic_tags.append("llm-agent")
-    merged.extend(heuristic_tags)
-
+    # tags must come from AI decision output only.
+    values = data.get("tags")
     normalized = []
-    for item in merged:
+    if isinstance(values, list):
+        source = values
+    else:
+        source = []
+    for item in source:
         token = normalize_tag_token(item)
         if token:
             normalized.append(token)
-
     deduped = dedupe_keep_order(normalized)
-    is_react_like = ("react" in title_abstract) or ("thought" in title_abstract and "observation" in title_abstract)
-    is_memory_like = "memory" in title_abstract
-    if is_memory_like and not is_react_like:
-        deduped = [t for t in deduped if t not in {"tool-use", "reasoning-acting"}]
-    if not deduped:
-        return ["method"]
-    # Keep tag set compact and consistent for downstream retrieval.
-    preferred_order = [
-        "method",
-        "llm-agent",
-        "agent-memory",
-        "latent-memory",
-        "generative-memory",
-        "self-evolution",
-        "self-evolving-agents",
-        "prompting",
-        "tool-use",
-        "reasoning-acting",
-        "chain-of-thought",
-        "interactive-decision-making",
-        "knowledge-intensive-qa",
-        "memory-trigger",
-        "memory-weaver",
-        "latent-token",
-        "reinforcement-learning",
-    ]
-    ordered = [tag for tag in preferred_order if tag in deduped]
-    ordered.extend([tag for tag in deduped if tag not in ordered])
-    return ordered[:8]
+
+    if deduped:
+        return deduped
+
+    # Minimal safety fallback: avoid guessing taxonomy.
+    return [DEFAULT_VALUE]
 
 
 def needs_review(value):
@@ -939,70 +844,31 @@ def needs_review(value):
 
 
 def build_high_priority_checks(data):
-    checks = []
-    title_abstract = f"{normalize_value(data.get('title'))} {normalize_value(data.get('abstract'))}".lower()
-    is_memory_paper = any(token in title_abstract for token in ("memory", "latent token", "memory trigger", "memory weaver"))
-    is_react_like = ("react" in title_abstract) or ("thought" in title_abstract and "observation" in title_abstract)
-    if normalize_value(data.get("status")).lower() == "seed" and is_memory_paper and not is_react_like:
-        ordered = [
-            "DOI / arXiv ID",
-            "8 个 benchmark 的具体名称",
-            "Backbone / base model",
-            "Memory Trigger 的训练方式与触发判定机制",
-            "Memory Weaver 的结构与 latent token 生成方式",
-            "latent token 如何插入推理流",
-            "训练策略与优化目标",
-            "主评测指标定义",
-            "主结果表与关键数字",
-            "消融实验与效率成本",
-            "失败案例与局限原文出处",
-        ]
-        return markdown_bullet_list(ordered)
+    # Prefer AI-provided prioritized checks when available.
+    ai_raw = data.get("high_priority_checks")
+    ai_points = split_to_points(ai_raw, "high_priority_checks")
+    ai_points = [p.strip() for p in ai_points if p and str(p).strip() and not is_placeholder(p)]
+    if ai_points:
+        return "\n".join(f"- {item}" for item in dedupe_keep_order(ai_points))
 
-    seed_defaults = [
-        "DOI / arXiv ID",
-        "Backbone / base model",
-        "主评测指标定义",
-        "主结果表与关键数字",
-        "关键图表路径与图注",
-        "消融实验与效率成本",
-        "失败案例与局限原文出处",
-    ]
-    if is_memory_paper:
-        seed_defaults.extend(
-            [
-                "Memory Trigger 的训练方式与触发判定机制",
-                "Memory Weaver 的结构与 latent token 生成方式",
-                "latent token 如何插入推理流",
-                "训练策略与优化目标",
-                "八个 benchmark 的具体名称",
-            ]
-        )
-    if is_react_like:
-        seed_defaults.append("ReAct+CoT（或同类组合策略）的具体设置")
-    if normalize_value(data.get("status")).lower() == "seed":
-        checks.extend(seed_defaults)
-
-    dataset_label = "八个 benchmark 的具体名称" if is_memory_paper else "benchmark 的具体名称"
     field_checks = [
         ("doi", "DOI / arXiv ID"),
-        ("datasets", dataset_label),
+        ("datasets", "\u6570\u636e\u96c6 / benchmark \u5217\u8868"),
         ("backbone", "Backbone / base model"),
-        ("training_strategy", "训练策略与优化目标"),
-        ("metrics", "主评测指标定义"),
-        ("main_results_table_or_text", "主结果表与关键数字"),
-        ("ablation_results", "消融实验与效率成本"),
+        ("training_strategy", "\u8bad\u7ec3\u7b56\u7565\u4e0e\u4f18\u5316\u76ee\u6807"),
+        ("metrics", "\u4e3b\u8bc4\u6d4b\u6307\u6807\u5b9a\u4e49"),
+        ("main_results_table_or_text", "\u4e3b\u7ed3\u679c\u8868\u4e0e\u5173\u952e\u6570\u5b57"),
+        ("most_important_figure_or_table", "\u5173\u952e\u56fe\u8868\u8def\u5f84\u4e0e\u56fe\u6ce8"),
+        ("ablation_results", "\u6d88\u878d\u5b9e\u9a8c\u4e0e\u6548\u7387\u6210\u672c"),
+        ("error_analysis", "\u5931\u8d25\u6848\u4f8b\u4e0e\u5c40\u9650\u539f\u6587\u51fa\u5904"),
     ]
-    for field, label in field_checks:
-        if needs_review(data.get(field)):
-            checks.append(label)
+    unresolved = [label for field, label in field_checks if needs_review(data.get(field))]
+    unresolved = dedupe_keep_order(unresolved)
 
-    checks = dedupe_keep_order(checks)
-    if not checks:
-        checks.append("关键事实字段已基本明确，可进入全文核读。")
+    if unresolved:
+        return "\n".join(f"- {item}" for item in unresolved)
 
-    return markdown_bullet_list(checks)
-
+    return "- 待核查：AI 未提供高优先级待复核列表；当前关键事实字段已基本完整，建议人工确认优先级排序。"
 
 def build_candidate_tag_suggestions(data):
     text = " ".join(
@@ -1027,6 +893,12 @@ def build_candidate_tag_suggestions(data):
 def infer_baselines_from_text(text):
     lowered = str(text or "").lower()
     terms = []
+    if "ircot" in lowered:
+        terms.append("IRCoT")
+    if "self-rag" in lowered or "self rag" in lowered:
+        terms.append("Self-RAG")
+    if "replug" in lowered:
+        terms.append("REPLUG")
     if "cot" in lowered or "chain-of-thought" in lowered:
         terms.append("CoT")
     if "act-only" in lowered or "action generation" in lowered or "vanilla action" in lowered:
@@ -1097,13 +969,6 @@ def postprocess_content(content, context):
         body,
     )
 
-    title = str(context.get("title", "")).lower()
-    is_memory_like = any(token in title for token in ("memgen", "memory"))
-    is_react_like = "react" in title
-    if is_memory_like and not is_react_like:
-        body = re.sub(r"^- ReAct\+CoT.*\n", "", body, flags=re.M)
-        body = re.sub(r"^- ReAct.*\n", "", body, flags=re.M)
-
     body = re.sub(r"[ \t]+\n", "\n", body)
     body = re.sub(r"\n{3,}", "\n\n", body)
     return front + body if front else body
@@ -1124,11 +989,13 @@ def validate_generated_content(content):
         problems.append("疑似中英混插句")
 
     body_lower = body.lower()
-    title_lower = str(content[:300]).lower()
-    if ("memgen" in body_lower or "memory weaver" in body_lower) and "react+cot" in body_lower:
-        problems.append("MemGen 内容疑似混入 ReAct+CoT 条目")
-    if "memgen" in title_lower and "react+cot" in body_lower:
-        problems.append("MemGen 文档中出现 ReAct+CoT")
+    title_lower = str(content[:400]).lower()
+    react_loop_pattern = re.search(
+        r"thought（?思考）?\s*→\s*action（?行动）?\s*→\s*observation（?观察）?\s*循环",
+        body_lower,
+    )
+    if react_loop_pattern and "react" not in title_lower:
+        problems.append("公式区疑似套用了 ReAct 循环模板，建议人工复核")
     return problems
 
 
@@ -1153,30 +1020,29 @@ def build_context(data):
         context[key] = normalize_value(data.get(key))
 
     context["paper_subtype"] = normalize_paper_subtype(data.get("paper_subtype"), data.get("paper_type"))
+    paper_type_norm = str(normalize_value(data.get("paper_type"))).strip().lower()
+    subtype_norm = str(context.get("paper_subtype", "")).strip().lower()
+    if subtype_norm in PAPER_SUBTYPE_CHOICES:
+        if is_placeholder(paper_type_norm):
+            context["paper_type"] = subtype_norm
+        elif paper_type_norm == "method" and subtype_norm in {"survey", "benchmark", "dataset"}:
+            # Avoid obvious type/subtype contradiction in final note rendering.
+            context["paper_type"] = subtype_norm
 
     generated_tags = build_tags(data)
-    paper_type_token = normalize_tag_token(data.get("paper_type"))
     canonical_tags = [normalize_tag_token(item) for item in normalize_list_items(data.get("canonical_tags"))]
     canonical_tags = [item for item in canonical_tags if item]
     candidate_tags = [normalize_tag_token(item) for item in normalize_list_items(data.get("candidate_tags"))]
     candidate_tags = [item for item in candidate_tags if item]
-    if "llm-agent" in generated_tags and "llm-agent" not in canonical_tags:
-        canonical_tags.insert(0, "llm-agent")
-    if not canonical_tags:
-        canonical_tags = [tag for tag in generated_tags if tag != paper_type_token][:5]
-        if not canonical_tags:
-            canonical_tags = generated_tags[:5]
-    if not candidate_tags:
-        candidate_tags = canonical_tags[:]
     suggestions = build_candidate_tag_suggestions(data)
     if suggestions:
         for token in suggestions:
             if token not in candidate_tags and len(candidate_tags) < 8:
                 candidate_tags.append(token)
-    if set(candidate_tags) == set(canonical_tags):
-        for token in suggestions:
-            if token not in canonical_tags and token not in candidate_tags and len(candidate_tags) < 8:
-                candidate_tags.append(token)
+    if not canonical_tags:
+        canonical_tags = [DEFAULT_VALUE]
+    if not candidate_tags:
+        candidate_tags = [DEFAULT_VALUE]
     canonical_tags = dedupe_keep_order(canonical_tags)
     candidate_tags = dedupe_keep_order(candidate_tags)
 
@@ -1207,11 +1073,21 @@ def build_context(data):
     context["meta_zotero_collections"] = body_list_text(data.get("zotero_collections"), "需从 Zotero 同步。")
     context["meta_zotero_tags"] = body_list_text(data.get("zotero_tags"), "需从 Zotero 同步。")
 
-    # If baselines are missing but evidence section already names them, surface a conservative summary.
+    # Conservative factual backfill using already-evidenced text blocks.
     if is_placeholder(normalize_value(data.get("baselines"))):
-        inferred = infer_baselines_from_text(data.get("evidence_baselines"))
+        inferred = infer_baselines_from_text(
+            " ".join(
+                [
+                    normalize_value(data.get("evidence_baselines")),
+                    normalize_value(data.get("citable_method_compare")),
+                    normalize_value(data.get("other_methods")),
+                    normalize_value(data.get("abstract")),
+                ]
+            )
+        )
         if inferred:
             data["baselines"] = "、".join(inferred) + "；完整 baseline 设置待回查实验部分。"
+
     if is_placeholder(normalize_value(data.get("main_results_table_or_text"))):
         evidence_result = normalize_value(data.get("evidence_main_results"))
         if not is_placeholder(evidence_result):
@@ -1219,6 +1095,13 @@ def build_context(data):
                 to_body_text(evidence_result, "main_results_table_or_text")
                 + "；完整主结果表和具体指标待回查。"
             )
+        else:
+            headline_result = normalize_value(data.get("headline_results"))
+            if not is_placeholder(headline_result):
+                data["main_results_table_or_text"] = (
+                    to_body_text(headline_result, "main_results_table_or_text")
+                    + "；完整主结果表和具体指标待回查。"
+                )
 
     # Body fields: normalize to reviewer-friendly Chinese style and avoid raw needs-check in正文.
     body_fields = [
@@ -1252,18 +1135,6 @@ def build_context(data):
     for field in body_fields:
         context[field] = to_body_text(data.get(field), field)
 
-    if normalize_value(context.get("status")).lower() == "seed":
-        reliability = str(context.get("result_reliability", "")).strip()
-        if reliability and not reliability.startswith("待核查："):
-            if reliability.startswith("高") or reliability.startswith("较高"):
-                context["result_reliability"] = (
-                    "中等偏高：当前结果在基准对比中表现积极，但仍需回查指标定义、方差/显著性与完整实验设置。"
-                )
-            elif not (reliability.startswith("中等") or reliability.startswith("中等偏高")):
-                context["result_reliability"] = (
-                    "中等：seed 阶段需回查指标定义、方差/显著性与完整实验设置后再提高可信度等级。"
-                )
-
     context["main_contributions_numbered"] = numbered_block(
         data.get("main_contributions"), "需回查原文中的贡献表述。", "main_contributions"
     )
@@ -1278,15 +1149,6 @@ def build_context(data):
         open_questions_items = [to_body_text(item, "open_questions") for item in normalize_list_items(data.get("open_questions"))]
     else:
         open_questions_items = split_to_points(data.get("open_questions"), "open_questions")
-    title_abstract = f"{normalize_value(data.get('title'))} {normalize_value(data.get('abstract'))}".lower()
-    is_react_like = ("react" in title_abstract) or ("thought" in title_abstract and "observation" in title_abstract)
-    is_memory_paper = "memory" in title_abstract
-    if is_memory_paper and not is_react_like:
-        open_questions_items = [
-            item
-            for item in open_questions_items
-            if "react+cot" not in str(item).lower() and "react" not in str(item).lower()
-        ]
     context["open_questions"] = markdown_bullet_list(open_questions_items)
     context["survey_key_papers"] = markdown_bullet_list(data.get("survey_key_papers"))
     context["next_actions"] = numbered_block(data.get("next_actions"), "需补充下一步行动计划。", "next_actions")
